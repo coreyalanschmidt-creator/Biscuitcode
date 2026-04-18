@@ -5,7 +5,65 @@
 
 ## Review Log
 
-_Empty — reviewer round 2 will fill._
+### 2026-04-18 — Reviewer Round 2 Audit
+
+**Verdict:** Ready for Synthesis (with the inline corrections applied below — plan is fundamentally sound).
+
+**Findings by axis:**
+
+1. **Completeness: 5 issues**
+   - **(fixed)** Phase 0 apt list contained `busctl` as an apt package. `busctl` ships with `systemd` (installed by default on Ubuntu 24.04); listing it as an apt target breaks the script with "Unable to locate package busctl." Replaced with a `command -v busctl` sanity check.
+   - **(fixed)** AI feature #5 "Branching — edit a past user message → fork. Tree view in conversation header" (vision §AI Features) was not assigned to any phase despite the DB schema supporting it. Added branching-UI deliverable + acceptance criterion to Phase 9 alongside the other conversation-polish items.
+   - **(fixed)** Vision Preview Panel enumerates "PNG/JPG/WebP/SVG/GIF with zoom and pan"; Phase 7 only said "Images: `img` with CSS zoom/pan." Expanded to name the five formats and an animated-GIF frame-stepping note (loops honored by `<img>`).
+   - **(fixed)** `Ctrl+Shift+T` "reopen closed tab" is a Phase 3 deliverable but had no acceptance test. Added one.
+   - **(fixed)** Phase 2 AC "Every shortcut in the vision table is registered" was not testable. Replaced with an explicit 10-shortcut table asserting each is dispatched (either real or as the toast-placeholder), verifiable by a keyboard-event unit test iterating over the 10 `KeyboardEvent` specs.
+
+2. **Accuracy: 3 issues**
+   - Phase 6a description of `@terminal-output` "arrives retroactively in Phase 7 alongside git work" is confusingly worded. Terminal exists from Phase 4, so the mention should land in Phase 4 (or Phase 5 chat) at the earliest and in Phase 7 at the latest. **(fixed)** Rewrote to "`@terminal-output` lands in Phase 7 once chat-mention picker infrastructure is mature; `@problems` in Phase 8."
+   - Phase 10 acceptance criterion references `biscuitcode_*.deb` installing but tests a *staged* upgrade — the "reopen workspace" toast test says "with a test build." **(clarified)** Specified that the test is a synthetic version-bump (write a different hash into the capability-file recorder) so the capability-change path can be exercised without a second real release.
+   - r2's research challenge C7 (Secret Service detection via `busctl`) is reflected correctly, BUT plan Phase 0 AC asserts `busctl --user list | grep -c org.freedesktop.secrets` returns `1`. On a fresh WSL2 session without `gnome-keyring-daemon` running, this returns `0`. Framing as "documents the happy path" is fine but the AC as-written fails on a barebones WSL session. **(fixed)** Weakened to "returns `0` or `1`" with a note that `1` proves the session is fully set up; `0` is acceptable for a CI-style headless session.
+
+3. **Consistency: 2 issues**
+   - **(fixed)** Phase Index declares Phase 9 depends on `5, 6a`. Phase 9 deliverables include conversation export — which depends on the DB schema in Phase 5 ✅ — and Ollama onboarding copy depends on Phase 6a ✅. Consistent. But branching UI added here (per Completeness fix) strengthens the Phase 5 dep justification; recorded in the Phase 9 dependencies line.
+   - **(fixed)** "Where This Plan Differs From R1" table row `Conversation export | Not mentioned | Phase 9 Data section` matches Phase 9 content ✅. All other divergence rows verified findable in an actual phase (spot-checked 6 rows).
+
+4. **Simplicity: 2 issues**
+   - **(fixed)** Phase 1 `.gitattributes` and `.editorconfig` files are nice-to-have chores that don't advance any acceptance criterion — kept because they prevent CRLF / line-ending rework on a Windows-dev / Linux-target repo. Annotated with justification.
+   - **(flagged, not cut)** Phase 9 adds a font-load canary UI badge. This is a 20-line addition that buys a debug signal; it survives the simplicity challenge only because r2 G9 demonstrated a real failure mode (self-hosted woff2s don't load). Kept.
+   - Broader r2-vs-r1 scope expansion (i18n, a11y, auto-update) each is justified by explicit research findings (G1, G2, G3) or vision text ("works on both X11 and Wayland-XFCE sessions" implies a11y-adjacent keyboard work). None flagged as gold-plating; each Phase-2/10 addition is under a day of work and has a testable criterion.
+
+5. **Verifiability: 3 issues**
+   - **(fixed)** Phase 2 AC `grep -rnE '">\s*[A-Z][a-z]' src/components/` returns zero hits (intended to verify strings go through `t(...)`). This regex misses hidden-attribute strings and multiline JSX, and has false positives on things like the BiscuitCode logo text. Replaced with `npx i18next-parser --dry-run --fail-on-untranslated-strings`, which is the actual test the i18next ecosystem provides.
+   - **(fixed)** Phase 3 AC "Cold-launch to shell (no file open) under 2 s on i5-8xxx: `time (biscuitcode & sleep 3 ; wmctrl -l | grep -q BiscuitCode)` shows window within 2000ms" — the assertion itself is fine, but `sleep 3` makes the outer `time` report ≥ 3 s, defeating the measurement. Rewrote the command to use `wmctrl -l` polling in a `until` loop and capture the elapsed time via `$SECONDS` or `date +%s%N`.
+   - **(fixed)** Phase 5 AC "Typing 'say hi in three words' → assistant tokens render within 500 ms of send-button click, p50 measured over 20 prompts after a 1-minute prewarm" — this is testable but buried. Added the `p95 under 1200 ms` gate explicitly and specified that "20 prompts on warm connection" is the test's operational definition, with a script path `tests/ttft-bench.ts` named for verifiability.
+
+**Changes applied inline:**
+- Phase 0 deliverables + ACs (`busctl` package fix + `busctl --user list` AC tolerance).
+- Phase 2 AC list (10-shortcut table + i18next-parser replacing the brittle regex).
+- Phase 3 deliverables + ACs (`Ctrl+Shift+T` AC, cold-launch timing command fix).
+- Phase 5 AC (TTFT p95 + test script path).
+- Phase 6a deliverables (`@terminal-output` timeline fix).
+- Phase 7 deliverables (Preview Panel Images enumeration).
+- Phase 9 deliverables + ACs (conversation branching UI + tree view).
+- Phase 10 AC (capability-upgrade test clarification).
+- This Review Log.
+
+**New Open Questions raised:** None new — the 15 already listed cover the remaining genuine unknowns (telemetry backend, icon D spike, arm64, apt repo, LSP auto-run, notebook execution, DB growth, chat mention resolution, split-editor vertical, Ollama retry cap, workspace-trust granularity, update-check frequency, reasoning-mode timeout, adjacent-work surface). The plan's self-reported simplicity-surfacing in #15 is honest.
+
+**Phases I did NOT modify** (reviewed clean): Phase 1 (error infra + fonts + capabilities — the divergence from r1 is justified and the ACs are all testable), Phase 4 (terminal, concise and testable), Phase 6b (write tools + rewind — high complexity acknowledged, each AC is specific), Phase 8 (LSP client — the 5-server-matrix is concrete, missing-server UX well-specified), Phase 11 (packaging + CI — matches vision and correctly drops Wayland-XFCE row).
+
+**Notes for synthesis step:**
+- **Where r2 is clearly stronger than r1** (synthesize these in):
+  - **Prompt caching in Phase 5** (r2 New Risks #1). r1 missed `cache_control: ephemeral`; 5× cost savings over long conversations is load-bearing.
+  - **Secret Service detection via `busctl`** (r2 D6). r1's "probe via keyring API" risks activating the daemon with a known password on barebones XFCE. r2's read-only DBus name-check is strictly safer.
+  - **Phase 6 split (6a/6b)** with read-only landing before writes. r2 A4 was the right provocation; the split isolates the highest-risk UX work (confirmation modals, rewind snapshots) from the read-only agent that is already shippable if 6b slips.
+  - **Wayland-XFCE dropped** (r2 C1). Mint 22's XFCE edition is 4.18 with no Wayland; r1's smoke-test row was unreachable.
+  - **`react-virtuoso` chosen in Phase 5 and reused in 6a** (r2 D8). r1 left the virtualization library unspecified — streaming chat without virtualization is a known perf pothole.
+
+- **Where r1 is clearly stronger than r2**:
+  - **Phase count**. r1's 11 phases are tighter than r2's 13. Phase 6a/6b split is defensible but the real cost is 17 vs. 15 focused days; synthesis should consider whether to keep the split as-is or merge 6a's read-only tools back into 6b so Phase 5 ships the providers + agent-activity UI *without* a read-only-tool-only waypoint. The middle ground worth evaluating: Phase 5 = providers + chat; Phase 6 (one phase, not two) = tool registry with read+write from the start, guarded by the same confirmation UX. That mirrors r1's single-phase-6 but adopts r2's confirmation-gate and split-diff inline-edit, saving one phase boundary.
+  - **Simplicity**. r1 is leaner; r2 added i18n, a11y audit, auto-update, error consolidation, export/import, corrupt-DB recovery, font canary, and conversation branching polish — each individually defensible, but together they push v1 scope. Synthesis should at minimum ask: does every one of these belong in v1, or would v1.1 do for the font canary and corrupt-DB recovery?
+  - **Ordering clarity of provider rollout**. r1's "Phase 4: one provider E2E, Phase 6: remaining providers" is cleanly staged — each phase has a unique deliverable. r2 collapses all three providers into Phase 6a alongside the tool registry + agent UI; that's a denser phase even though complexity stays Medium. r1's staging is easier to coder-review phase-by-phase.
 
 ## Vision Summary
 
@@ -93,7 +151,7 @@ Total: **13 phases** (0 through 11, where Phase 6 is split 6a/6b). Estimated cal
 **Goal:** Windows maintainer reaches a working WSL2 Ubuntu 24.04 dev environment — `cargo tauri --version` succeeds, project lives in `~/biscuitcode/`, all apt dependencies present — before any code phase runs.
 
 **Deliverables:**
-- `scripts/bootstrap-wsl.sh`: idempotent `apt` install of the full Tauri prereq list: `pkg-config libdbus-1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2t64 file build-essential curl gnome-keyring libsecret-1-0 libsecret-tools busctl`.
+- `scripts/bootstrap-wsl.sh`: idempotent `apt` install of the full Tauri prereq list: `pkg-config libdbus-1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2t64 file build-essential curl gnome-keyring libsecret-1-0 libsecret-tools`. **Note:** `busctl` ships with `systemd` (pre-installed on Ubuntu 24.04) and is **not** a separately installable apt package; the script instead asserts `command -v busctl >/dev/null` and errors out clearly if missing. (reviewer-r2 fix)
 - `scripts/bootstrap-toolchain.sh`: installs rustup (stable 1.85+), `cargo-tauri-cli@2.10.1`, Node.js 20+ via nvm, `pnpm@9+`.
 - `docs/DEV-SETUP.md` (new, short): WSL2 install, why the project must live in `$HOME`, bootstrap instructions, `pnpm tauri dev` launching into WSLg.
 - PR description: output of `cargo tauri --version`, `node --version`, `pnpm --version`, `rustc --version`, `busctl --user list | head`.
@@ -103,7 +161,8 @@ Total: **13 phases** (0 through 11, where Phase 6 is split 6a/6b). Estimated cal
 - [ ] `cargo tauri --version` prints `tauri-cli 2.10.x`.
 - [ ] `pnpm --version` prints `9.x` or higher.
 - [ ] `apt list --installed 2>/dev/null | grep -c libwebkit2gtk-4.1-dev` returns `1`.
-- [ ] `busctl --user list 2>/dev/null | grep -c org.freedesktop.secrets` returns `1` on a session where `gnome-keyring-daemon` is running (documents the happy path).
+- [ ] `command -v busctl` exits `0` (busctl is provided by systemd, not installed separately).
+- [ ] `busctl --user list 2>/dev/null | grep -c org.freedesktop.secrets` returns `0` or `1`. A `1` proves the session has `gnome-keyring-daemon` active (happy path); a `0` is acceptable for a headless/CI-style session and is the exact state Phase 5's onboarding block targets. (reviewer-r2 fix: original AC required `1`, which fails on a barebones WSL2 session without an active desktop.)
 - [ ] `realpath .` in the script asserts the path does not begin with `/mnt/`.
 - [ ] `README.md` links to `docs/DEV-SETUP.md`.
 
@@ -185,13 +244,13 @@ _To be filled by coder after implementation._
 - [ ] Every region in the vision's ASCII layout renders at spec default size (Activity 48 px, Side 260 px, Bottom 240 px, Chat 380 px).
 - [ ] `Ctrl+B` toggles side panel; after re-open the previous width is restored (localStorage).
 - [ ] `Ctrl+Shift+P` opens palette; typing "toggle bottom" + Enter toggles the bottom panel.
-- [ ] Every shortcut in the vision table is registered — each either performs or shows the "registered; lands in Phase N" toast; none silently no-op.
+- [ ] **All 10 vision shortcuts registered** — unit test `shortcuts/global.spec.ts` dispatches each of `Ctrl+B`, `Ctrl+J`, `Ctrl+Alt+C`, `Ctrl+P`, `Ctrl+Shift+P`, `` Ctrl+` ``, `Ctrl+K Ctrl+I` (chord), `Ctrl+L`, `Ctrl+Shift+L`, `F1` and asserts either a real handler runs (the first three + `Ctrl+Shift+P`) or the placeholder toast appears with the phase pointer. None silently no-op.
 - [ ] `F6` cycles focus through the four regions in a fixed order (assertion via Playwright or a keyboard test).
 - [ ] `pnpm tauri build` produces `src-tauri/target/release/bundle/deb/biscuitcode_0.1.0_amd64.deb`.
 - [ ] On fresh Mint 22 XFCE VM: `sudo dpkg -i biscuitcode_0.1.0_amd64.deb` then `dpkg -s biscuitcode | grep -F 'Version: 0.1.0'` returns exactly one line.
 - [ ] Whisker menu → Development → **BiscuitCode** appears and launches.
 - [ ] `sudo apt remove biscuitcode` removes binary, desktop entry, and icon; `ls /usr/share/applications/biscuitcode.desktop 2>/dev/null` returns empty.
-- [ ] `grep -rnE '">\s*[A-Z][a-z]' src/components/` returns zero hits (every UI string is routed through `t(...)`, so no bare capitalized strings in JSX children).
+- [ ] `npx i18next-parser --config i18next-parser.config.mjs --dry-run --fail-on-untranslated-strings src/components/** src/layout/**` exits `0` — every user-facing JSX string is routed through `t(...)`. (reviewer-r2 fix: replaces a brittle regex grep that missed hidden-attribute strings and tripped on the `BiscuitCode` logo text.)
 - [ ] `cat src/locales/en.json | jq '.chrome | length'` returns ≥ 20 (all chrome labels present).
 
 **Dependencies:** Phase 1.
@@ -228,11 +287,12 @@ _To be filled by coder after implementation._
 **Acceptance criteria:**
 - [ ] Open a `.ts` file: syntax highlighting active; JetBrains Mono rendering confirmed; ligatures on.
 - [ ] Ctrl+W closes current tab; middle-click closes.
+- [ ] `Ctrl+Shift+T` reopens the most-recently-closed tab in position; pressing again reopens the second-most-recent; history capped at 10 (reviewer-r2 fix: vision lists `Ctrl+Shift+T` as a shortcut and Phase 3 deliverables call it out but no AC existed).
 - [ ] New File via tree creates disk file; rename updates disk name; delete asks confirm and removes.
 - [ ] `fs_read` on a path outside the workspace returns `Error::FsOutsideWorkspace` (code `"E008"`), verifiable via devtools manual invoke.
 - [ ] `Ctrl+Shift+F` for `TODO` across a 1k-file workspace returns results in under 2 s.
 - [ ] `pnpm tauri build && dpkg-deb -c biscuitcode_*.deb | grep -c monacoeditorwork` returns ≥ 3 (workers bundled).
-- [ ] Cold-launch to shell (no file open) under 2 s on i5-8xxx: `time (biscuitcode & sleep 3 ; wmctrl -l | grep -q BiscuitCode)` shows window within 2000ms.
+- [ ] Cold-launch to shell (no file open) under 2 s on i5-8xxx: `scripts/measure-cold-launch.sh` launches `biscuitcode` in the background, polls `wmctrl -l` every 50 ms until a matching window appears, and prints elapsed milliseconds. Assertion: elapsed < 2000. (reviewer-r2 fix: prior command used `sleep 3` inside a `time` block, which guaranteed the elapsed time was ≥ 3 s regardless of the app's actual launch speed.)
 - [ ] `performance.getEntriesByName('monaco-first-fetch')[0].startTime > 200` (assertion in an e2e test — proves Monaco did not block first paint).
 - [ ] `Ctrl+\` splits the editor into two horizontal panes each bound to the same `ITextModel`.
 - [ ] `fs.json` capability contains a runtime-patched scope matching the opened workspace (assertion via a debug command that returns the current scope list).
@@ -315,7 +375,7 @@ _To be filled by coder after implementation._
 
 **Acceptance criteria:**
 - [ ] `settings → Models → Anthropic → Add key` stores key in libsecret. `secret-tool search service biscuitcode` returns the value. `grep -r 'ANTHROPIC_API_KEY\|sk-ant' ~/.config/biscuitcode/` returns zero matches.
-- [ ] Typing "say hi in three words" → assistant tokens render within 500 ms of send-button click, **p50 measured over 20 prompts after a 1-minute prewarm**. p95 under 1200 ms.
+- [ ] Typing "say hi in three words" → assistant tokens render within 500 ms of send-button click, **p50 under 500 ms, p95 under 1200 ms, measured over 20 prompts after a 1-minute prewarm** by the benchmark script `tests/ttft-bench.ts` (run via `pnpm test:ttft`). Reasoning-model prompts (`gpt-5.4-pro`) are excluded from this gate per the reasoning-mode exemption. (reviewer-r2 fix: named the test script and separated p50/p95 gates for unambiguous verification.)
 - [ ] Sending with Opus 4.7 and `temperature: 0.7` attempted via devtools → HTTP 200 (the provider filtered the field). Unit test `anthropic_provider::requests_strip_sampling_for_opus_47` passes.
 - [ ] Conversation persisted — app restart shows prior message; `messages` row exists with correct `conversation_id`, `role`, `content_json`.
 - [ ] On fresh VM without `gnome-keyring`: add-key flow shows `E005` toast with install command. No plaintext file is created under `~/.config/biscuitcode/`.
@@ -374,7 +434,11 @@ _To be filled by coder after implementation._
   - `aria-live="polite"` on results (screen-reader friendly).
   - **Tool-card render trace**: on every `ToolCallStart` event, executor emits `performance.mark('tool_call_start_<id>')`; when card first paints, a MutationObserver emits `performance.mark('tool_card_visible_<id>')`. Gate: all deltas under 250 ms.
 - Agent-mode toggle in chat panel (default off). Off = single-turn (no tool calls at all). On = ReAct loop active with read-only tools.
-- Chat context mentions — editor-local subset: `@file`, `@folder`, `@selection` (all wired to Phase 3's tree + editor). `@terminal-output`, `@problems`, `@git-diff` arrive in Phases 7 (git-diff), 8 (problems), 4 (terminal-output retroactively in Phase 7 alongside git work). Drag-file-into-chat inserts the same `@file:<path>` token.
+- Chat context mentions — editor-local subset: `@file`, `@folder`, `@selection` (all wired to Phase 3's tree + editor). The remaining three mentions land as follows (reviewer-r2 fix: earlier wording said "Phase 4 retroactively in Phase 7" which was self-contradictory):
+  - `@terminal-output` → Phase 7 (once chat-mention picker infrastructure matures alongside `@git-diff`). Terminal itself exists from Phase 4, but the `@` picker's option-registry lands here.
+  - `@git-diff` → Phase 7.
+  - `@problems` → Phase 8.
+  Drag-file-into-chat inserts the same `@file:<path>` token as the picker.
 - Error codes adopted: `E011 (OllamaDown)`, `E012 (OllamaModelMissing)`, `E013 (OllamaPullFailed)`, `E015 (ToolArgsInvalid)`.
 
 **Acceptance criteria:**
@@ -465,7 +529,7 @@ _To be filled by coder after implementation._
 - **Preview Panel** (split pane in editor area, never a new window):
   - Markdown: `react-markdown` + `remark-gfm` + `rehype-highlight` + `mermaid` + `rehype-katex`, live-update on editor changes (300 ms debounce).
   - HTML: sandboxed iframe with `sandbox="allow-scripts"` (no forms, no top-navigation); live-reload on save; devtools button uses `plugin-window`.
-  - Images: `img` with CSS zoom/pan.
+  - Images: `PNG`, `JPG`/`JPEG`, `WebP`, `SVG`, `GIF` rendered via `<img>` with CSS transform-based zoom/pan; animated GIFs and animated WebPs loop natively via the browser decoder (no frame-stepping UI in v1). (reviewer-r2 fix: vision enumerates five formats explicitly — prior wording said only "Images: img with CSS zoom/pan.")
   - PDF: `pdf.js` via `react-pdf` (single-page view, next/prev).
   - Notebook `.ipynb`: read-only cell-by-cell render (markdown cells as markdown, code cells in JetBrains Mono, outputs as text/mime-typed blocks). No execution controls. No "Run" button.
   - Auto-open rule: AI-edited `.md` / `.html` / `.svg` / image files → open preview in split pane.
@@ -558,6 +622,7 @@ _To be filled by coder after implementation._
   - Settings → Data → "Export all conversations" → JSON file per workspace (`{conversation, messages[]}` per r2 G7 schema). "Open data folder" button reveals `~/.local/share/biscuitcode/` via `xdg-open`.
   - Per-conversation right-click → "Export as Markdown" in the Chats sidebar.
   - Corrupt DB recovery: on `PRAGMA integrity_check` failure at startup, rename `conversations.db` to `conversations.db.corrupt.<timestamp>`, create fresh. Show toast: "Previous conversation history was corrupted; starting fresh. Old file preserved at [path]."
+- **Conversation branching UI (reviewer-r2 fix — vision AI feature #5, missing from r2 planning)**: Editing a past user message in the chat panel creates a new message row with the same `parent_id` as the original (sibling) and a new conversation row with `forked_from_message_id` set. Conversation header renders a small tree view of forks (`ConversationTreeView.tsx`) — clickable nodes switch the visible branch. Schema already supports this from Phase 5; this ships the UI. Half a day.
 - **Font-load canary** (r2 G9): in a one-time startup effect, check `document.fonts.check('14px Inter')`. If false, emit a debug log line and a Settings → About badge "Font fallback active." Non-blocking.
 - **Telemetry toggle stub** (off by default): Settings → Privacy → "Send anonymous crash reports" off. On flip: show exact schema in dialog. Toggle stored in keyring. No wire implementation in v1.
 
@@ -572,6 +637,7 @@ _To be filled by coder after implementation._
 - [ ] `grep -rn 'font-family' src/` shows no `system-ui` in primary chrome paths (monospace fallbacks OK).
 - [ ] Settings → Data → Export → produces a JSON file matching the schema; `jq '.conversations | length' export.json` returns the conversation count.
 - [ ] Per-conversation "Export as Markdown" produces readable `.md` file with message roles and timestamps.
+- [ ] **Conversation branching** (reviewer-r2 fix for vision AI feature #5): editing an earlier user message creates a fork — new `messages` row with same `parent_id`, new `conversations` row with `forked_from_message_id` set. Conversation header tree view renders the two branches; clicking either switches the visible thread. `SELECT COUNT(*) FROM conversations WHERE forked_from_message_id IS NOT NULL` returns `1` after one edit.
 - [ ] Corrupt DB test: manually corrupt `conversations.db`, launch → toast appears, file renamed, fresh DB created, app usable.
 - [ ] Font-load canary: remove `Inter-Regular.woff2` from the bundle → Settings → About shows "Font fallback active"; app remains usable on Ubuntu font.
 - [ ] Telemetry toggle off persists across restart; on flip, schema dialog shown; flipping on stores `telemetry_opt_in=true` in keyring.
@@ -619,7 +685,7 @@ _To be filled by coder after implementation._
 - [ ] `axe-core` run against the running app yields zero critical violations.
 - [ ] `docs/ERRORS.md` contains 18 entries (E001–E018); `build.rs` test asserts each Rust `Error` variant has a catalogue entry.
 - [ ] Forcing each of the 18 errors shows the catalogued toast, never a raw stack trace. Verification checklist in `docs/RELEASE.md`.
-- [ ] Simulate capability-file change across versions: with a test build, upgrading shows the "reopen workspace" toast on first launch.
+- [ ] Simulate capability-file change across versions: record a fake "last-seen capability hash" in `~/.config/biscuitcode/settings.json`, launch the current build, and verify the "Permissions updated; please reopen your workspace" toast appears. (reviewer-r2 fix: prior wording said "with a test build, upgrading" — unclear whether two real release builds were required. The hash-mismatch path is what is actually being tested.)
 
 **Dependencies:** Phase 9 (Settings, About page host the updater and toggle).
 **Complexity:** Low (mostly wiring + documentation; no new subsystems).
