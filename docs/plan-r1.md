@@ -4,7 +4,62 @@
 
 ## Review Log
 
-_Empty — reviewer round 1 will fill._
+### 2026-04-18 — Reviewer Round 1 Audit
+
+**Verdict:** Needs Revision
+
+The plan is substantively sound, well-cited, and mostly consistent with research-r1.md and vision.md. But several vision-mandated features are unscoped to any phase, some acceptance criteria are not meaningfully testable as written, and one phase introduces premature abstraction. I applied inline corrections below and added one new phase split where an acceptance gap forced it.
+
+**Findings by axis:**
+
+1. **Completeness — 8 issues**
+   - Vision mandates `@file`/`@folder`/`@selection`/`@terminal-output`/`@problems`/`@git-diff` chat mentions and "drag files from tree into chat" — not owned by any phase. **Fix applied:** added to Phase 6 deliverables (selection-focused subset) and noted `@terminal-output`/`@problems`/`@git-diff` for Phase 8.
+   - Vision lists `Ctrl+L` (send selection to chat) and `Ctrl+\` (split editor horizontally) in the shortcut table — missing from Phase 2's shortcut layer. **Fix applied:** added both to Phase 2 deliverables and acceptance criteria.
+   - Vision hard-constraints "X11 and Wayland-XFCE" but the plan only tests X11. Research §14 Risk #6 specifically flags Xwayland differences. **Fix applied:** added a Wayland smoke-test row to Phase 10 and to Global Acceptance Criteria.
+   - No systematic unit/integration-test gate — individual tests mentioned ad hoc (`requests_strip_sampling_for_opus_47`). **Fix applied:** added a `cargo test --workspace` + `pnpm test` gate to Phase 10's CI workflow and Global Acceptance.
+   - Vision quality bar item "every failure path has a specific actionable error" is in Global Acceptance but no phase lists the error-path inventory. **Fix applied:** added to Phase 9 deliverables (error toast catalogue).
+   - Gutter blame toggle spec was too thin ("optional"). **Fix applied:** tightened Phase 8 deliverable with explicit on/off-by-settings behaviour and acceptance.
+   - `cargo audit` / `pnpm audit` were deferred to Phase 10 only, but should gate PRs from Phase 1. **Fix applied:** moved audits into the CI workflow added in Phase 10 and referenced in Phase 1's "add CI skeleton" deliverable.
+   - `AnthropicProvider` default model list in Phase 5 omitted `claude-opus-4-6` (vision lists it; research §7 notes it as legacy-but-available). **Fix applied:** clarified that legacy is exposed but not default (already present — left as-is; no edit needed after re-read).
+
+2. **Accuracy — 3 issues**
+   - Phase 2 conflates `plugin-window-state` (window geometry) with panel-size persistence. Window state persists the outer Tauri window; panels need a separate localStorage bridge. **Fix applied:** removed the "plugin-window-state or" ambiguity in Phase 2 and specified Zustand+localStorage for panel sizes only; plugin-window-state stays for outer window.
+   - Phase 9 dependency rationale ("Phase 8 depends because settings uses preview split-pane") is specious — theme preview and preview split-pane are unrelated surfaces. **Fix applied:** rewrote Phase 9 dependency to cite only Phase 5 (keyring/providers) and Phase 7 (Ollama onboarding); demoted Phase 8 to soft-only dependency and updated the Phase Index row.
+   - Phase 1 acceptance `grep -r 'biscuit-auth\|^biscuit ' src-tauri/Cargo.toml` regex is fragile (TOML allows `biscuit=` without surrounding spaces; also the `|` in single quotes works but the regex misses `biscuit-cli`). **Fix applied:** rewrote to `grep -cE '^(biscuit|biscuit-auth|biscuit-cli)\s*=' src-tauri/Cargo.toml` returns `0`.
+
+3. **Consistency — 2 issues**
+   - Phase 1 creates six workspace crates (`-agent`, `-providers`, `-db`, `-pty`, `-lsp`) all as empty placeholders. That contradicts Law 2 (Simplicity) — we create crates in the phase that uses them. **Fix applied:** reduced Phase 1 crate creation to only `biscuitcode-core`; pushed crate creation into each respective phase (added one line each to Phases 4, 5, 6, 7, 8).
+   - Status bar in Phase 2 shows `Ln 0 C0` (not a valid editor position). **Fix applied:** corrected to `Ln 1 C1` for placeholder.
+
+4. **Simplicity — 2 issues**
+   - Phase 1's 6-crate scaffold is over-engineered (see Consistency #1 — same fix).
+   - Phase 10's six-step smoke-test checklist duplicates the Global Acceptance Criteria. **Fix applied:** pointed Phase 10 at Global Acceptance rather than restating the same bullets.
+
+5. **Verifiability — 4 issues**
+   - Phase 5: "tokens render in under 500ms from send button press (p50 on warm connection)" — no sample size. **Fix applied:** specified "measured over 20 sequential prompts after a 1-minute prewarm".
+   - Phase 6: "Pause button stops before the next tool call" — boundary-only criterion is correct but needs a concrete worst-case bound so a test can decide. **Fix applied:** added "and within 5 seconds of click if no tool is currently running".
+   - Phase 2: acceptance `biscuitcode --version` prints `0.1.0` — the binary is invoked by desktop entry, not a CLI; no `--version` parser is specified as a deliverable. **Fix applied:** replaced with `dpkg -s biscuitcode | grep -F "Version: 0.1.0"`.
+   - Global Acceptance "Provider tool calls render as Agent Activity cards at start time" — visual verification is not a gate. **Fix applied:** tightened to a `performance.mark` trace assertion (`tool_call_render_delta_ms < 250` from `content_block_start` event to DOM card visible), checked in Phase 6 unit/e2e.
+
+**Changes applied inline:**
+- Phase 1: reduced scaffolded crates; fixed crate-collision grep; added CI-skeleton pointer.
+- Phase 2: added `Ctrl+L` and `Ctrl+\` shortcuts; split `plugin-window-state` from panel persistence; fixed `--version` criterion; fixed `Ln 0 C0` → `Ln 1 C1`.
+- Phase 4: added "create `biscuitcode-pty` crate here" note.
+- Phase 5: added "create `biscuitcode-providers` + `biscuitcode-db` crates here"; tightened latency-measurement criterion.
+- Phase 6: added chat mentions (`@file`/`@folder`/`@selection`); drag-file-into-chat; tool-card-render-latency trace assertion; pause-latency worst-case bound; "create `biscuitcode-agent` crate here".
+- Phase 7: added "create crate confirmation" line (already in `biscuitcode-providers` from Phase 5, so just noted the Ollama + OpenAI modules land here).
+- Phase 8: added `@terminal-output`/`@problems`/`@git-diff` mentions ownership; tightened gutter-blame deliverable; added "create `biscuitcode-lsp` crate here".
+- Phase 9: removed specious dependency on Phase 8 (demoted to soft); added error-path catalogue deliverable.
+- Phase 10: added `cargo test --workspace` + `pnpm test` + `cargo audit` + `pnpm audit --prod` to CI; added Wayland-XFCE smoke test row; replaced restated smoke-test with pointer to Global Acceptance.
+- Phase Index: updated Phase 9 `Depends on` from "5, 7, 8" to "5, 7".
+- Global Acceptance: added Wayland smoke, test-suite green, and the tool-card trace gate.
+
+**New Open Questions raised:**
+- Q10 (added below): Should the split-editor behaviour (`Ctrl+\`) be v1 or deferred? Vision lists it; plan previously omitted. Default: ship in Phase 3 alongside multi-tab.
+- Q11: Chat mentions (`@file`, etc.) — is a grep-style substring match acceptable for v1, or must it be semantic (via LSP)? Default: substring match now; semantic in v1.1.
+- Q12: Error-path catalogue — how many distinct errors must be listed? Default: one per top-level failure class (network, auth, provider-down, keyring-missing, permission-denied, LSP-missing, Ollama-missing, file-outside-workspace).
+
+**Phases I did NOT modify (reviewed clean):** Phase 0, Phase 3 (light clarity touches only if needed — none applied), Architecture Decisions list, Assumptions list.
 
 ## Vision Summary
 
@@ -66,7 +121,7 @@ Each decision cites the research section that justifies it.
 | 6 | Agent Loop + Tool Registry + Inline Edit + Rewind | Not Started | High | 3, 5 |
 | 7 | OpenAI + Ollama Providers + Ollama Detection/Install | Not Started | Medium | 5 |
 | 8 | Git Panel + LSP Client + Preview Panel | Not Started | High | 3 |
-| 9 | Onboarding + Settings UI + Theming + Icon | Not Started | Medium | 5, 7, 8 |
+| 9 | Onboarding + Settings UI + Theming + Icon | Not Started | Medium | 5, 7 |
 | 10 | Packaging + CI + GPG Signing + Release Smoke Test | Not Started | Medium | 9 |
 
 Total: **11 phases** (0 through 10). Estimated calendar: Phase 0 half day, Phases 1/2/4/7/9/10 ~1 day each, Phases 3/5/8 ~2 days each, Phase 6 ~3 days. Total ~15 focused working days for a solo maintainer, aligned with the vision's 21-day sketch after WSL2 bootstrap + mid-phase re-plans.
@@ -109,7 +164,8 @@ _To be filled by coder after implementation._
 
 **Deliverables:**
 - `pnpm create tauri-app` output scaffolded with React + TS + Vite + Tailwind, app name `biscuitcode`, bundle ID `io.github.Coreyalanschmidt-creator.biscuitcode`.
-- Internal workspace crates: `biscuitcode-core`, with placeholder `biscuitcode-agent`, `biscuitcode-providers`, `biscuitcode-db`, `biscuitcode-pty`, `biscuitcode-lsp` (empty lib.rs files ready for later phases).
+- Internal workspace crate: **only `biscuitcode-core`** this phase. Sibling crates (`biscuitcode-agent`, `biscuitcode-providers`, `biscuitcode-db`, `biscuitcode-pty`, `biscuitcode-lsp`) are created in the phase that first uses them — see each phase's deliverables. No speculative empty crates.
+- CI workflow skeleton committed (detailed in Phase 10): `.github/workflows/ci.yml` with lint + typecheck + test jobs on PR, even though tests are near-empty here. This makes later phases' gates incremental rather than last-minute.
 - `tauri.conf.json` with `bundle.active: true`, `bundle.identifier`, Linux section declaring `webkitVersion: "4.1"` and `deb.depends: ["libwebkit2gtk-4.1-0", "libgtk-3-0"]`, `deb.recommends: ["gnome-keyring", "ollama"]`.
 - `tailwind.config.ts` with brand tokens *verbatim* as CSS custom properties + Tailwind theme extension (`biscuit-50..900`, `cocoa-50..900`, semantic `ok/warn/error`).
 - Self-hosted fonts: `src-tauri/fonts/Inter-{Regular,Medium,SemiBold}.woff2`, `JetBrainsMono-{Regular,Medium}.woff2`. `@font-face` rules in `src/theme/fonts.css`; **no `system-ui` fallback** for primary UI text.
@@ -123,9 +179,10 @@ _To be filled by coder after implementation._
 - [ ] Document background is `#1C1610`; a single `--biscuit-500` (`#E8B04C`) accent bar renders on the sidebar placeholder.
 - [ ] `curl -sS http://localhost:1420/` (Vite dev) returns HTML with `Inter` loaded from `/fonts/`, not CDN (`grep -v 'fonts.googleapis' /index.html`).
 - [ ] `src-tauri/capabilities/fs.json` contains `"permissions"` with `fs:allow-read-text-file` scoped to `$APPCONFIG` only; `grep -c '"identifier": "fs:allow-write"' src-tauri/capabilities/fs.json` returns `0`.
-- [ ] `cargo tree -p biscuitcode-core` lists `biscuitcode-core` and `biscuitcode-agent` as workspace members.
+- [ ] `cargo tree -p biscuitcode-core` lists `biscuitcode-core` as a workspace member (other `biscuitcode-*` crates are created in later phases).
 - [ ] `cargo build -p biscuitcode-core` succeeds with `-D warnings`.
-- [ ] `grep -r 'biscuit-auth\|^biscuit ' src-tauri/Cargo.toml` returns nothing (no crate name collision).
+- [ ] `grep -cE '^(biscuit|biscuit-auth|biscuit-cli)\s*=' src-tauri/Cargo.toml` returns `0` (no namespace-collision crate is a direct dependency; TOML-spacing tolerant).
+- [ ] CI workflow skeleton present at `.github/workflows/ci.yml`; a PR touching only `README.md` triggers the workflow and the `lint` job exits `0`.
 
 **Dependencies:** Phase 0.
 **Complexity:** Medium.
@@ -144,20 +201,21 @@ _To be filled by coder after implementation._
 **Goal:** Render the Activity Bar / Side Panel / Editor Area / Bottom Panel / Chat Panel / Status Bar layout with `react-resizable-panels`, wire every toggle shortcut, and produce the first installable-to-VM `.deb`.
 
 **Deliverables:**
-- `src/layout/WorkspaceGrid.tsx` using `react-resizable-panels` with persisted sizes via `plugin-window-state` or a Zustand-backed localStorage bridge.
+- `src/layout/WorkspaceGrid.tsx` using `react-resizable-panels`, with panel sizes persisted via a **Zustand + `localStorage` bridge** (one record per persisted panel). Outer window geometry (position, maximized state) is handled separately by `plugin-window-state`. These are two concerns; do not conflate.
 - Components (empty shells, 1-2 lines each): `ActivityBar`, `SidePanel`, `EditorArea`, `TerminalPanel`, `ChatPanel`, `AgentActivityPanel`, `PreviewPanel`, `StatusBar`. Each renders a labelled placeholder so the region is visible.
 - `ActivityBar` 48 px, icons via `lucide-react` (Files, Search, Git, Chats, Settings). Active icon gets a 2 px `--biscuit-500` left-edge bar.
-- Shortcut layer in `src/shortcuts/global.ts` handling: `Ctrl+B` (side), `Ctrl+J` (bottom), `Ctrl+Alt+C` (chat), `Ctrl+Shift+P` (palette placeholder), `Ctrl+\`` (terminal focus placeholder), `Ctrl+P` (quick-open placeholder), `F1` (help placeholder), `Ctrl+Shift+L` (new chat placeholder), `Ctrl+K Ctrl+I` (inline edit placeholder). Chord support via a two-stage handler.
+- Shortcut layer in `src/shortcuts/global.ts` handling the **full** vision shortcut table: `Ctrl+B` (side), `Ctrl+J` (bottom), `Ctrl+Alt+C` (chat), `Ctrl+Shift+P` (palette placeholder), `Ctrl+\`` (terminal focus placeholder), `Ctrl+P` (quick-open placeholder), `F1` (help placeholder), `Ctrl+Shift+L` (new chat placeholder), `Ctrl+K Ctrl+I` (inline edit placeholder), `Ctrl+L` (send-selection-to-chat placeholder), `Ctrl+\` (editor horizontal split placeholder). Chord support via a two-stage handler. Placeholders fire a toast `"<shortcut> registered; wiring lands in Phase <n>"` so verifiability is honest.
 - Command palette (`Ctrl+Shift+P`) with registered commands: `View: Toggle Side Panel`, `View: Toggle Bottom Panel`, `View: Toggle Chat Panel`. Enough to prove the registry works.
-- Status bar renders `git:main`, `0 errors`, `claude-opus-4-7`, `Ln 0 C0` — all static placeholders this phase.
+- Status bar renders `git:main`, `0 errors`, `claude-opus-4-7`, `Ln 1 C1` — all static placeholders this phase.
 - `cargo tauri build --target x86_64-unknown-linux-gnu` produces `biscuitcode_0.1.0_amd64.deb`.
 
 **Acceptance criteria:**
 - [ ] Every region in the vision's ASCII layout renders with the correct default size (Activity 48px, Side 260px, Bottom 240px, Chat 380px).
 - [ ] Pressing `Ctrl+B` toggles side panel visibility; after re-open the previous width is restored.
 - [ ] Pressing `Ctrl+Shift+P`, typing "toggle bottom", pressing Enter toggles the bottom panel.
+- [ ] Every shortcut in the vision table is registered — pressing each one either performs the action or shows the "registered; wiring lands in Phase N" toast; none are silently no-ops.
 - [ ] `pnpm tauri build` produces `src-tauri/target/release/bundle/deb/biscuitcode_0.1.0_amd64.deb`.
-- [ ] On a Mint 22 XFCE VM: `sudo dpkg -i biscuitcode_0.1.0_amd64.deb` then `biscuitcode --version` prints `0.1.0`.
+- [ ] On a Mint 22 XFCE VM: `sudo dpkg -i biscuitcode_0.1.0_amd64.deb` then `dpkg -s biscuitcode | grep -F 'Version: 0.1.0'` returns one line.
 - [ ] After install, Whisker menu → Development → **BiscuitCode** exists with the placeholder icon and launches the app.
 - [ ] `sudo apt remove biscuitcode` removes the binary, desktop entry, and icon; `ls /usr/share/applications/biscuitcode.desktop` returns no such file.
 
@@ -216,6 +274,7 @@ _To be filled by coder after implementation._
 
 **Deliverables:**
 - `TerminalPanel.tsx` with tabbed `xterm.js` instances, `@xterm/addon-fit`, `@xterm/addon-web-links`, `@xterm/addon-search`, `@xterm/addon-webgl` (with canvas fallback).
+- **Create workspace crate `biscuitcode-pty` here** (per Phase 1's deferred-creation rule).
 - Rust `biscuitcode-pty` crate exposing commands `terminal_open(shell, cwd, rows, cols) -> SessionId`, `terminal_input(session_id, bytes)`, `terminal_resize(session_id, rows, cols)`, `terminal_close(session_id)`.
 - Two Tokio tasks per session: reader (PTY master → `terminal_data_{session_id}` event), writer (consumes queued input). Hash-map of sessions under `Arc<RwLock<HashMap<SessionId, PtySession>>>`.
 - Shell detection: read `$SHELL`, else `getent passwd $UID`, else `/bin/bash`.
@@ -248,6 +307,7 @@ _To be filled by coder after implementation._
 **Goal:** User can add an Anthropic API key in settings (stored in libsecret), open the chat panel, pick `claude-opus-4-7`, type a message, and watch streaming text render — no tools, no agent loop yet.
 
 **Deliverables:**
+- **Create workspace crates `biscuitcode-providers` and `biscuitcode-db` here** (per Phase 1's deferred-creation rule).
 - `biscuitcode-core::secrets` module wrapping `keyring` 3.6 with features `linux-native-async-persistent + async-secret-service + crypto-rust + tokio`. API: `async fn set(service, key, value)`, `async fn get(service, key)`, `async fn delete(service, key)`.
 - Startup check `secret_service_available()` that pings `org.freedesktop.secrets` over DBus; if absent, emits an event that blocks API-key entry and shows the install prompt in onboarding (scaffolded now, full onboarding Phase 9).
 - `biscuitcode-providers::anthropic::AnthropicProvider` implementing the `ModelProvider` trait:
@@ -265,7 +325,7 @@ _To be filled by coder after implementation._
 **Acceptance criteria:**
 - [ ] `settings → Models → Anthropic → Add key` stores the key in libsecret. Verified with `secret-tool search service biscuitcode` — the value is returned from the daemon, not from any file under `~/.config/biscuitcode/`.
 - [ ] `grep -r 'ANTHROPIC_API_KEY\|sk-ant' ~/.config/biscuitcode/` returns nothing after key entry.
-- [ ] Typing "say hi in three words" → assistant tokens render in under 500ms from send button press (p50 on warm connection).
+- [ ] Typing "say hi in three words" → assistant tokens render in under 500ms from send button press, **p50 measured over 20 sequential prompts after a 1-minute prewarm** (fresh TCP/TLS HTTP/2 connection held open by `reqwest` keep-alive). p95 under 1200ms over the same 20-prompt sample.
 - [ ] Sending the same message with `claude-opus-4-7` selected and `temperature: 0.7` attempted via devtools shim returns HTTP 200 (the provider filtered the field).
 - [ ] The conversation is persisted — reopen app, prior message visible, messages table populated.
 - [ ] On a VM without `gnome-keyring`, add-key flow shows the exact install command (`sudo apt install gnome-keyring libsecret-1-0`); no plaintext file created.
@@ -288,6 +348,7 @@ _To be filled by coder after implementation._
 **Goal:** Full ReAct-style agent executor with tool calls streaming to Agent Activity, workspace-scoped tools (`read_file`, `write_file`, `run_shell`, `search_code`, `apply_patch`), inline AI edit on selection (`Ctrl+K Ctrl+I`), and per-action rewind.
 
 **Deliverables:**
+- **Create workspace crate `biscuitcode-agent` here** (per Phase 1's deferred-creation rule).
 - `biscuitcode-agent::tools` module with the five tool handlers, each declaring JSON Schema input, side-effect class (`read`/`write`/`shell`), and confirmation policy. All file tools respect workspace-scope. `run_shell` has an explicit sandbox: no `sudo`, no network calls except via the provider HTTP scope.
 - `biscuitcode-agent::executor` implementing ReAct loop:
   - Accepts a conversation and streams from the provider.
@@ -300,15 +361,21 @@ _To be filled by coder after implementation._
 - Inline edit (`Ctrl+K Ctrl+I`): select code → popover input → backend calls provider with an edit prompt + selection + file path → diff streamed into a transient Monaco diff decoration → user accepts/rejects/regenerates.
 - Rewind UI: conversation header shows a rewind button per assistant message; clicking it restores snapshots + truncates messages past that point.
 - `apply/run` buttons on code blocks in chat: `apply` opens the affected file and applies the patch using Monaco's model diff; `run` pushes the selected code into a new terminal tab (no auto-exec — user hits Enter).
+- **Chat context mentions — editor-local subset:** typing `@` in the chat input opens a picker for `@file` (fuzzy over workspace file tree), `@folder`, `@selection` (current editor selection). Each resolves to a structured context block injected into the user message. The non-editor mentions `@terminal-output`, `@problems`, `@git-diff` land in Phase 8 (they depend on terminal/LSP/git surfaces).
+- **Drag-file-into-chat:** dropping a file from the Phase 3 file tree onto the chat input inserts an `@file:<path>` token — equivalent to the picker flow.
+- **Tool-card render trace instrumentation:** on every `ToolCallStart` event the executor emits `performance.mark('tool_call_start_<id>')`; when the Agent Activity card first paints, a MutationObserver emits `performance.mark('tool_card_visible_<id>')`. A derived measure is persisted in the debug log; acceptance gates on it.
 
 **Acceptance criteria:**
 - [ ] With agent mode on: asking "list files in src/" → Agent Activity shows `search_code` card → result appears → assistant continues with a natural-language summary.
 - [ ] Write-tool call ("create a file hi.txt with contents 'hello'") triggers a confirmation modal showing the diff; decline prevents file creation; accept creates it.
 - [ ] Rewind on the assistant message that created `hi.txt` restores its pre-create state (file removed) and removes messages after.
 - [ ] `Ctrl+K Ctrl+I` on a selected function inside Monaco streams a diff inline; accept applies, reject discards, regenerate re-streams.
-- [ ] Pause button during a long agent run stops before the next tool call (verified by timing — pause arrives within one tool-call boundary).
+- [ ] Pause button during a long agent run stops before the next tool call, and **within 5 seconds of click** if no tool is currently running (pause flag is checked at least every 5s by the loop; no tool-call boundary required in the no-tool case).
 - [ ] `run_shell` called with `sudo rm -rf /` is rejected before execution with a specific error (`ShellForbiddenPrefix`).
 - [ ] All workspace-trust-off runs prompt; with workspace-trust-on the same runs do not prompt.
+- [ ] Typing `@` in chat opens the mention picker; selecting `@file` then a filename inserts the structured token and the backend sees the file content in the request payload.
+- [ ] Dropping a file from the file tree onto the chat input inserts the same `@file:<path>` token as the picker.
+- [ ] **Tool-card render latency gate:** for a prompt that triggers 3 tool calls, every `tool_card_visible_<id> - tool_call_start_<id>` measure is under `250ms` — assertion lives in an e2e test `agent_tool_card_visible_within_250ms`.
 
 **Dependencies:** Phase 3 (file system, tabs), Phase 5 (provider stream, conversation persistence).
 **Complexity:** High.
@@ -370,9 +437,11 @@ _To be filled by coder after implementation._
 **Goal:** VS Code parity features: a git panel with stage/unstage/commit/push/pull, a working LSP client for five languages, and a preview panel covering Markdown, HTML, images, and PDF.
 
 **Deliverables:**
+- **Create workspace crate `biscuitcode-lsp` here** (per Phase 1's deferred-creation rule).
 - **Git** via `git2-rs` (reads) + `std::process::Command('git')` (writes):
   - Side Panel Git pane: files grouped by `staged`/`unstaged`/`untracked`, hunk-level stage/unstage (Monaco inline diff buttons), commit message input, commit button, push/pull buttons that stream stdout to the Terminal panel.
-  - Branch name in status bar, clickable → branch switcher dropdown; optional gutter blame toggle in settings.
+  - Branch name in status bar, clickable → branch switcher dropdown.
+  - **Gutter blame:** off by default; settings toggle `editor.blame.gutter = true` enables it. Uses `git2::BlameOptions` per visible line range; re-blames on `git commit` or file save; shows `hash[0..7] · author · relative-date` in the left gutter. Blame column width 180px.
   - File tree git status colours (M/U/A/D) now live.
 - **LSP** via `biscuitcode-lsp` crate + `monaco-languageclient` frontend:
   - Rust spawns `rust-analyzer`, `typescript-language-server --stdio`, `pyright-langserver --stdio`, `gopls`, `clangd` based on detected project files (presence of `Cargo.toml`, `package.json`/`tsconfig.json`, `pyproject.toml`/`requirements.txt`, `go.mod`, `CMakeLists.txt`/`compile_commands.json`).
@@ -387,6 +456,7 @@ _To be filled by coder after implementation._
   - Notebook (`.ipynb`): read-only render — parse cells, render markdown cells as markdown, code cells as JetBrains Mono, outputs as text/mime-typed blocks. No execution.
   - Auto-open rule: AI-edited `.md`, `.html`, `.svg`, image → open preview as split pane.
 - `shell.json` capability: add `which <binary>` and the LSP binary paths to the registry; no wildcard args.
+- **Non-editor chat mentions land here** (Phase 6 shipped the editor-local subset): `@terminal-output` (active terminal tab's visible buffer), `@problems` (all LSP diagnostics in current workspace), `@git-diff` (output of `git diff` for staged + unstaged). Picker surfaces these only when the relevant subsystem has data (e.g., no terminals open → `@terminal-output` disabled).
 
 **Acceptance criteria:**
 - [ ] Open a Rust file → `rust-analyzer` starts → hover shows type; go-to-definition jumps correctly; diagnostics appear.
@@ -396,6 +466,8 @@ _To be filled by coder after implementation._
 - [ ] A `.ipynb` with 3 cells renders read-only with cell borders.
 - [ ] Missing language server (e.g., `clangd` absent) triggers a toast with a copy-to-clipboard `sudo apt install clangd` command; the app does not auto-run it.
 - [ ] HTML preview iframe cannot navigate away (`window.top.location` attempts blocked by sandbox).
+- [ ] Gutter blame toggle off by default; enabling it in settings shows `hash · author · relative-date` strings in the editor gutter for the active file; toggling off removes them.
+- [ ] Typing `@` in chat with a terminal open and an LSP diagnostic present surfaces `@terminal-output`, `@problems`, `@git-diff` options in the picker (disabled items when no data).
 
 **Dependencies:** Phase 3 (editor, file tree).
 **Complexity:** High.
@@ -425,6 +497,7 @@ _To be filled by coder after implementation._
 - Icon: `packaging/icons/biscuitcode.svg` authored as Concept A — biscuit-gold `>_` glyph on cocoa-dark rounded-square (#1C1610, 22% corner radius). Render with `rsvg-convert` to `biscuitcode-{16,32,48,64,128,256,512}.png`. `.ico` for Windows future.
 - **16x16 render verification**: CI step asserts `biscuitcode-16.png` pixel-level legibility: at least 2 distinct pixels forming a `>` shape and 3 pixels for `_`. Visual diff against a checked-in reference.
 - VS Code theme import: placeholder entry under Appearance, disabled, tooltip "Coming in v1.1".
+- **Error-path catalogue** (`src/errors/catalogue.ts`): one enumerated entry per top-level failure class, each with `code`, `user-facing message`, `recovery action`, `link-to-docs`. Classes: (1) no network / DNS failure, (2) invalid API key, (3) provider down (4xx/5xx), (4) keyring / Secret Service missing, (5) permission denied on file op, (6) file outside workspace root, (7) LSP server missing, (8) Ollama daemon down, (9) Ollama model pull failed, (10) shell command forbidden. Each class maps to a toast component that renders the message + recovery CTA (never a raw stack).
 
 **Acceptance criteria:**
 - [ ] Fresh install → first launch shows onboarding; no way to reach the main UI without either setting a provider or clicking "Skip" in step 2 (skip leaves all badges red).
@@ -434,8 +507,9 @@ _To be filled by coder after implementation._
 - [ ] 16x16 icon renders a readable `>_` at launcher-grid size — CI pixel-check passes.
 - [ ] `desktop-file-validate packaging/deb/biscuitcode.desktop` exits 0.
 - [ ] No `system-ui` in `grep -rn 'font-family' src/` output (Inter only in primary chrome).
+- [ ] For each of the 10 error-catalogue classes, forcing the failure (e.g., disconnect network, revoke key, stop `ollama serve`, chmod workspace) shows the catalogued toast — never a raw stack. Verified by an e2e checklist in `docs/RELEASE.md`.
 
-**Dependencies:** Phase 5 (onboarding needs keyring + providers), Phase 7 (Ollama onboarding path), Phase 8 (settings page uses theming decisions that depend on the preview split-pane).
+**Dependencies:** Phase 5 (onboarding needs keyring + providers), Phase 7 (Ollama onboarding path). Phase 8 is **not** a hard dependency; theme-preview is unrelated to the preview split-pane subsystem.
 **Complexity:** Medium.
 **Split rationale:** Onboarding + settings + theming + icon cluster naturally because they're all user-chrome work that has no functional blockers from earlier phases except the provider setup in Phase 5/7. Doing this before Phase 10 (packaging) is critical because the icon PNGs and `.desktop` file have to be in the bundle. The vision keeps onboarding/settings/icon in Phase 8; I promoted it to its own phase ahead of packaging to give it the focused polish pass the vision's quality bar demands ("no placeholder text, no lorem ipsum").
 **Status:** Not Started
@@ -462,15 +536,9 @@ _To be filled by coder after implementation._
   - `sha256sum biscuitcode_*.deb BiscuitCode-*.AppImage > SHA256SUMS.txt`.
   - Upload `.deb`, `.AppImage`, `.deb.asc`, `.AppImage.asc`, `SHA256SUMS.txt` to the release.
   - `linuxdeploy` retry wrapper for AppImage step (research §12 flake).
-- `.github/workflows/ci.yml` — on PR: lint (`cargo clippy -D warnings`, `pnpm lint`), typecheck, unit tests.
+- `.github/workflows/ci.yml` — on PR: lint (`cargo clippy -D warnings`, `pnpm lint`), typecheck (`tsc --noEmit`), tests (`cargo test --workspace`, `pnpm test`), security audits (`cargo audit`, `pnpm audit --prod`). This file was skeleton-scaffolded in Phase 1 and is fully populated here.
 - AppImage `libfuse2t64` handling: README banner + a postinstall check in the AppImage wrapper that prompts install if missing.
-- Release smoke-test checklist in `docs/RELEASE.md`:
-  1. Download `.deb` from GitHub release.
-  2. On a fresh Mint 22 XFCE VM: `sudo dpkg -i biscuitcode_1.0.0_amd64.deb`.
-  3. Whisker menu → Development → BiscuitCode.
-  4. Complete onboarding in under 2 minutes.
-  5. Ctrl+L on a selection, Agent mode refactor, accept diff, commit + push.
-  6. `sudo apt remove biscuitcode` clean.
+- Release smoke-test checklist in `docs/RELEASE.md` — **pointer to Global Acceptance Criteria** rather than a restatement. The document's "Release smoke test" section reads: "Run the full Global Acceptance Criteria checklist on a fresh Mint 22 XFCE VM. If any item fails, do not tag the release." The VM matrix is explicit: one X11 session (22.0, 22.1, 22.2) and one Wayland-XFCE session (22.2 only, where XFCE 4.20 is available).
 - Three screenshots for README, using `BiscuitCode Warm` theme: main editor with chat, Agent Activity mid-run, preview split pane.
 - README: install instructions, screenshots, license, link to `docs/DEV-SETUP.md`.
 
@@ -478,7 +546,8 @@ _To be filled by coder after implementation._
 - [ ] Pushing a `v1.0.0` tag triggers CI; within ~15 min the release page has both artifacts, both `.asc` signatures, and `SHA256SUMS.txt`.
 - [ ] `gpg --verify biscuitcode_1.0.0_amd64.deb.asc biscuitcode_1.0.0_amd64.deb` returns "Good signature".
 - [ ] `sha256sum -c SHA256SUMS.txt` passes.
-- [ ] On fresh Mint 22 XFCE VM: full 6-step smoke-test checklist passes.
+- [ ] On fresh Mint 22 XFCE VM (X11 — 22.0, 22.1, 22.2): Global Acceptance Criteria checklist passes 100%.
+- [ ] On Mint 22.2 with Wayland-XFCE session: cold-launch succeeds, clipboard copy/paste in terminal works, drag-file-into-chat works, window decorations render as expected. (Any single failure here downgrades the release note but does not block v1; we document Wayland as "beta" if any row flakes.)
 - [ ] `time (biscuitcode & sleep 3 ; wmctrl -l | grep BiscuitCode)` — the window title appears within 2000ms.
 - [ ] `apt remove biscuitcode` removes binary, desktop entry, icons across all 7 sizes, and the `/usr/bin/biscuitcode` symlink.
 - [ ] README screenshots render without `lorem ipsum` or any `TODO` strings.
@@ -510,12 +579,14 @@ These span the whole project and are checked at Phase 10 against the signed `v1.
 - [ ] Dark theme uses Cocoa scale exclusively: `grep -rn '#000000\|#fff\b\|#ffffff' src/theme/` returns zero hits.
 - [ ] Every failure path has an actionable error: verified by the error-path checklist (no network, bad key, Ollama down, permission denied, keyring missing) — each shows a specific message, not a stack trace.
 - [ ] First-token-latency on Claude streaming: p50 under 500ms, p95 under 1200ms, measured over 20 prompts on a warm connection.
-- [ ] Provider tool calls render as Agent Activity cards at start time, not completion time (visual verification: card appears within 250ms of `tool_use` `content_block_start`).
+- [ ] Provider tool calls render as Agent Activity cards at start time, not completion time — **automated via the `performance.mark` trace wired in Phase 6:** e2e test `agent_tool_card_visible_within_250ms` asserts every `tool_card_visible_<id> - tool_call_start_<id>` under 250ms across a canonical 3-tool prompt.
 - [ ] `cargo audit` and `pnpm audit --prod` return zero critical vulnerabilities.
 - [ ] `desktop-file-validate packaging/deb/biscuitcode.desktop` exits 0.
 - [ ] All dependencies MIT/Apache-2.0/BSD compatible — `cargo-license` + `license-checker-rseidelsohn` reports clean.
 - [ ] Icon legible at 16x16 in the XFCE system tray (manual visual check).
 - [ ] Release smoke-test checklist in `docs/RELEASE.md` passes 100% on a fresh VM.
+- [ ] `cargo test --workspace` and `pnpm test` both exit `0`; `cargo audit` and `pnpm audit --prod` report zero critical vulnerabilities (re-stated from phase-level gates for traceability).
+- [ ] Wayland-XFCE session (Mint 22.2): cold-launch, clipboard, and drag-file-into-chat pass on at least one run. Failures are logged but do not block v1 unless the session crashes.
 
 ## Open Questions
 
@@ -529,3 +600,6 @@ These span the whole project and are checked at Phase 10 against the signed `v1.
 8. **Preview notebook deferred-execution scope.** v1 is read-only render. Does the plan need a placeholder "Run all cells" disabled button in v1, or do we not hint at it at all? Default: do not hint; render-only with no run controls in v1.
 9. **Conversation DAG storage overhead.** `content_json` stores all content blocks including base64-encoded images if vision is used. For large sessions, DB growth could be MBs/conversation. Should Phase 5 include a size cap or lazy blob table, or is that a v1.1 problem? Default: defer; surface in settings as "Clear old conversations" in Phase 9.
 10. **Non-blocking adjacent work noticed during planning** (surfaced per Law 3, not silently added): none beyond what's listed above. If the reviewer wants to expand, candidates include: file-drag-drop into chat (vision says yes, plan puts it in Phase 5), AI git commit message generation (vision does not mention), crash-reporter with privacy-stripped fields (telemetry-adjacent).
+11. **(Reviewer-added) Split-editor Ctrl+\\ behaviour.** Vision lists it in the shortcut table but no prior phase claimed it. Phase 2 now registers the binding as a placeholder; Phase 3 is the natural home for the real split. Default: implement as a true split-model Monaco pane in Phase 3; if budget runs tight, a horizontally-stacked single-instance tab row acts as a degraded fallback.
+12. **(Reviewer-added) Chat-mention resolution strategy.** Is substring / whole-file attachment acceptable for v1's `@file`/`@folder`/`@selection`, or must we do semantic (LSP-symbol) resolution? Default: substring attachment in v1; semantic mentions are a v1.1 enhancement. Impacts Phase 6 and Phase 8 scope.
+13. **(Reviewer-added) Error-path catalogue size.** How many distinct errors must the Phase 9 catalogue enumerate? Default: one entry per top-level failure class as listed in the Phase 9 deliverable (10 entries). Subclasses (e.g., five variants of "provider down") are handled by parametrising one entry, not by ten separate entries.
