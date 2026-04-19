@@ -42,6 +42,9 @@ async-stream = "0.3"
 # Logging — Phase 5 turns this on; Phase 1 left it minimal.
 tracing = "0.1"
 
+# Regex — used in the Ollama provider's XML-tag fallback for Gemma 3 fine-tunes.
+regex = "1"
+
 [lib]
 name = "biscuitcode_providers"
 path = "src/lib.rs"

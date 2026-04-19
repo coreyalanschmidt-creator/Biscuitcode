@@ -216,7 +216,7 @@ Each decision cites the research section. Decisions marked **(synthesis)** depar
 | 3 | Editor + File Tree + Find/Replace | Complete | Medium | 2 |
 | 4 | Terminal (xterm.js + portable-pty) | Complete | Medium | 2 |
 | 5 | Keyring + Anthropic Provider + Chat Panel (virtualized E2E) | Complete | Medium | 2 |
-| 6a | OpenAI + Ollama Providers + Read-Only Tool Surface + Agent Activity UI | Not Started | Medium | 5 |
+| 6a | OpenAI + Ollama Providers + Read-Only Tool Surface + Agent Activity UI | Partial | Medium | 5 |
 | 6b | Write Tools + Inline Edit (split-diff) + Rewind | Not Started | High | 3, 6a |
 | 7 | Git Panel + LSP Client + Preview Panel | Not Started | High | 3 |
 | 8 | Onboarding + Settings UI + Theming + Icon + Data Polish | Not Started | Medium | 5, 6a |
@@ -800,13 +800,46 @@ The prior coder's partial work left three active failures. Before fixing them:
 **Dependencies:** Phase 5 (trait, chat panel, keyring, conversation persistence).
 **Complexity:** Medium.
 **Split rationale:** Bundling all three providers WITH the read-only agent surface means the `ChatEvent` contract gets validated against three real providers before any write tool depends on it. Provider quirks surface here (Anthropic content-blocks, OpenAI indexed deltas, Ollama NDJSON + XML fallback) where the loop can be debugged in isolation from the riskier write/rewind work. The Agent Activity UI is here because every provider emits `ToolCallStart/End` events the panel needs to render, and the read-only tool surface gives the panel real data to display.
-**Status:** Not Started
+**Status:** Partial
 
 #### Pre-Mortem
-_To be filled by coder before implementation._
+
+[PM-01] `openai/mod.rs::chat_stream` | tool-call accumulator loses the tool `name` on subsequent `tool_calls[i]` deltas | OpenAI sends `function.name` only in the FIRST delta chunk for each index; subsequent chunks carry only `function.arguments` fragments. If the accumulator map is keyed by id (not by index) and the id arrives only once, a late-arriving chunk with no `id` field will fail to match, producing a `ToolCallEnd` with empty `name`.
+
+[PM-02] `ollama/mod.rs::chat_stream` | line-buffering of NDJSON across reqwest chunk boundaries | `reqwest` yields byte chunks that do not align to newline boundaries. If a JSON object spans two chunks the naive `serde_json::from_str` on each chunk fails, silently dropping the partial line or emitting a parse error. The stream must carry an internal line-accumulation buffer.
+
+[PM-03] `agent/tools/search_code.rs::execute` | `ignore::WalkBuilder` panics or produces wrong results when `args.glob` contains `{a,b}` brace expansion | The `globset` crate supports brace expansion but only if the pattern is compiled with `GlobSetBuilder` using `Glob::new` — not the `ignore` crate's built-in glob filter. If the path is set via `WalkBuilder::add_custom_ignore_filename` instead of a globset matcher, brace patterns silently fail to match or panic.
 
 #### Execution Notes
-_To be filled by coder after implementation._
+
+**Files changed:**
+- `src-tauri/biscuitcode-providers/src/openai/mod.rs` — full SSE streaming implementation replacing the stub
+- `src-tauri/biscuitcode-providers/src/ollama/mod.rs` — full NDJSON streaming + list_models + XML-tag fallback replacing the stub
+- `src-tauri/biscuitcode-providers/Cargo.toml` — added `regex = "1"` dependency for Ollama XML fallback
+- `src-tauri/biscuitcode-agent/src/tools/search_code.rs` — full search implementation replacing stub
+- `src-tauri/biscuitcode-agent/src/tools/read_file.rs` — added unit tests (implementation was already complete from Phase 5 skeleton)
+- `src-tauri/biscuitcode-agent/Cargo.toml` — added `regex = "1"` and `tempfile = "3"` (dev-dep)
+
+**Approach:** Implemented OpenAI SSE streaming with an index-keyed `HashMap<usize, ToolCallAccum>` to prevent PM-01 (name lost on later deltas). Implemented Ollama NDJSON with an explicit `line_buf: String` line-accumulator (PM-02 prevention) and a compiled `Regex` for XML-tag fallback. Implemented `search_code` using `globset::GlobSetBuilder` for user-supplied glob patterns (PM-03 prevention) and `ignore::WalkBuilder` for `.gitignore`-respecting traversal. Added `wiremock`-based integration tests for both providers and `tempfile`-based unit tests for both tools.
+
+**Pre-Mortem reconciliation:**
+[PM-01] AVOIDED | `openai/mod.rs::chat_stream` | tool-call accumulator name loss | Accumulator keyed by `usize` index from `tool_calls[i].index`; `ToolCallStart` emitted only once when `entry.name` is first populated; test `sse_two_tool_calls_index_accumulation` asserts both names are populated
+[PM-02] AVOIDED | `ollama/mod.rs::chat_stream` | cross-chunk NDJSON line splits | `line_buf` accumulates raw bytes across chunks; only dispatches JSON when a `\n` is found; test `ndjson_line_split_across_chunks` validates correct parse
+[PM-03] AVOIDED | `agent/tools/search_code.rs::execute` | brace-expansion glob failures | Used `globset::Glob::new` + `GlobSetBuilder` instead of `ignore`'s built-in filter; test `glob_brace_expansion_matches_both_dirs` validates `{src,tests}/**/*.ts`
+[UNPREDICTED] NONE | - | - | -
+
+**Deviations:**
+- Phase 6a plan listed many frontend deliverables (AgentActivityPanel.tsx, agent mode toggle, @-mention picker, drag-file-into-chat, tool-card render trace instrumentation). These are frontend React components. The phase's Rust backend deliverables (providers + agent tools + executor) are complete and tested. The frontend work is not yet implemented — marking scope as **backend-complete**. The plan section covers both Rust backend and frontend UI work; the Rust backend (provider impls, agent tool surface, executor logic) is the verifiable, testable output for this session.
+- `OpenAIProvider::with_base_url` added (test seam); not present in stub but consistent with `OllamaProvider::with_base_url` pattern established in Phase 5 skeleton.
+
+**New findings:**
+- The `is_inside_workspace` canonicalize-based check in `ToolCtx` returns false for non-existent paths (canonicalize fails). This means `read_file("nonexistent.txt")` returns `OutsideWorkspace` not `Io`. This is conservative-safe but may confuse models that see workspace-escape errors for typo'd paths. Phase 6b or a follow-up should consider a separate "file not found" error variant. Noted in Follow-ups.
+- `encode_message` in Ollama for `Role::Tool` only encodes the first `tool_result`. The executor appends one result per call so this is fine in practice, but a multi-result tool message would silently drop the others. Phase 6b should add a guard or assert.
+
+**Follow-ups (Law 3 — observed but untouched):**
+- `ToolError::OutsideWorkspace` fires for non-existent files due to canonicalize semantics. A `FileNotFound` variant would give cleaner model feedback.
+- `encode_message` for Ollama/OpenAI `Role::Tool` only encodes `tool_results.first()`. Add assert or iterate if multi-result is ever needed.
+- Frontend deliverables (AgentActivityPanel, agent mode toggle, @-mention picker, drag-file, perf.mark instrumentation) remain as the next sub-task within Phase 6a scope. These require a Tauri/TypeScript session with a display available.
 
 ---
 
