@@ -346,6 +346,8 @@ describe('ChatPanel @-mention picker', () => {
 
     await act(async () => {
       fireEvent.keyDown(textarea, { key: 'Enter' });
+      // commitMention is async — flush microtasks so the setInput fires.
+      await new Promise((r) => setTimeout(r, 0));
     });
 
     // The textarea should now contain the @file token.

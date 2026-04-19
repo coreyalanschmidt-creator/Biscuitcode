@@ -200,6 +200,7 @@ function MonacoPane({ tabId }: MonacoPaneProps) {
   const { t } = useTranslation();
   const monaco = useMonaco();
   const editorRef = useRef<import('monaco-editor').editor.IStandaloneCodeEditor | null>(null);
+  const blameDecorationsRef = useRef<string[]>([]);
   const { tabs, setCursorPosition, markDirty } = useEditorStore();
 
   const tab = tabs.find((t) => t.id === tabId) ?? null;
@@ -246,6 +247,58 @@ function MonacoPane({ tabId }: MonacoPaneProps) {
     window.addEventListener('biscuitcode:editor-reveal-line', handleReveal);
     return () => window.removeEventListener('biscuitcode:editor-reveal-line', handleReveal);
   }, [tab?.path]);
+
+  // Phase 7: git blame gutter.
+  // Listens for biscuitcode:blame-toggle events; fetches blame for visible
+  // line range and renders as Monaco inline decorations in the gutter.
+  useEffect(() => {
+    const handleBlameToggle = async (e: Event) => {
+      const { enabled } = (e as CustomEvent<{ enabled: boolean }>).detail ?? {};
+      const editor = editorRef.current;
+      if (!editor || !tab || !monaco) return;
+
+      if (!enabled) {
+        // Clear decorations.
+        blameDecorationsRef.current = editor.deltaDecorations(blameDecorationsRef.current, []);
+        return;
+      }
+
+      // Fetch blame for visible lines.
+      const visibleRanges = editor.getVisibleRanges();
+      if (!visibleRanges.length) return;
+      const startLine = visibleRanges[0].startLineNumber;
+      const endLine = visibleRanges[visibleRanges.length - 1].endLineNumber;
+
+      try {
+        const blameLines = await invoke<Array<{ line: number; hash: string; author: string; relative_date: string }>>(
+          'git_blame',
+          { path: tab.path, startLine, endLine },
+        );
+
+        const decorations = blameLines.map((b) => ({
+          range: new monaco.Range(b.line, 1, b.line, 1),
+          options: {
+            isWholeLine: false,
+            glyphMarginClassName: undefined,
+            after: {
+              content: `  ${b.hash} · ${b.author} · ${b.relative_date}`,
+              inlineClassName: 'biscuit-blame-inline',
+            },
+          },
+        }));
+
+        blameDecorationsRef.current = editor.deltaDecorations(
+          blameDecorationsRef.current,
+          decorations,
+        );
+      } catch {
+        // Blame failed (file not tracked or no commits) — silently no-op.
+      }
+    };
+
+    window.addEventListener('biscuitcode:blame-toggle', handleBlameToggle);
+    return () => window.removeEventListener('biscuitcode:blame-toggle', handleBlameToggle);
+  }, [tab?.path, monaco]);
 
   // Phase 6b: Ctrl+K Ctrl+I — inline AI edit on selection.
   const ctrlKPending = useRef(false);
@@ -362,17 +415,32 @@ export function EditorArea() {
         );
       }, 100);
     };
+    // Phase 7: auto-open preview for AI-edited .md / .html / .svg / image files.
+    // Phase 6b emits biscuitcode:preview-file; EditorArea re-emits it to the
+    // PreviewPanel (which also listens on it directly). No action needed here
+    // because PreviewPanel listens on window for this event independently.
+    // We just ensure the tab is open so the split-pane shows it.
+    const handlePreviewFile = (e: Event) => {
+      const detail = (e as CustomEvent<{ path: string }>).detail;
+      if (!detail?.path) return;
+      openTab(detail.path);
+      // If split is not visible, open it so the preview shows beside the editor.
+      if (!splitVisible) toggleSplit();
+    };
+
     window.addEventListener('biscuitcode:editor-quick-open', handleCtrlP);
     window.addEventListener('biscuitcode:editor-split', handleCtrlSlash);
     window.addEventListener('biscuitcode:editor-open-file', handleOpenFile);
     window.addEventListener('biscuitcode:open-file-at', handleOpenFileAt);
+    window.addEventListener('biscuitcode:preview-file', handlePreviewFile);
     return () => {
       window.removeEventListener('biscuitcode:editor-quick-open', handleCtrlP);
       window.removeEventListener('biscuitcode:editor-split', handleCtrlSlash);
       window.removeEventListener('biscuitcode:editor-open-file', handleOpenFile);
       window.removeEventListener('biscuitcode:open-file-at', handleOpenFileAt);
+      window.removeEventListener('biscuitcode:preview-file', handlePreviewFile);
     };
-  }, [toggleSplit, openTab]);
+  }, [toggleSplit, openTab, splitVisible]);
 
   // Keyboard: Ctrl+W closes active tab, Ctrl+Shift+T reopens last.
   useEffect(() => {

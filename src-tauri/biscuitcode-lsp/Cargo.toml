@@ -28,6 +28,9 @@ serde_json = "1.0"
 # Concurrent session map.
 parking_lot = "0.12"
 
+# PATH lookup for LSP binary detection.
+which = "7"
+
 # IDs
 ulid = { version = "1", features = ["serde"] }
 

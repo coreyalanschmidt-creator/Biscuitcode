@@ -15,10 +15,12 @@ use std::sync::{Arc, Mutex};
 use biscuitcode_agent::executor::confirmation::PendingConfirmations;
 use biscuitcode_core::errors::CatalogueError;
 use biscuitcode_db::Database;
+use biscuitcode_lsp::LspRegistry;
 use biscuitcode_pty::PtyRegistry;
 use commands::agent::ConfirmationState;
 use commands::chat::ChatDb;
 use commands::fs::WorkspaceState;
+use commands::lsp::LspState;
 use serde::Serialize;
 use tauri::{Emitter, Manager};
 use tracing_subscriber::EnvFilter;
@@ -46,6 +48,8 @@ pub fn run() {
         .manage(ChatDb(Mutex::new(None)))
         // Phase 6b — confirmation gate shared state.
         .manage(ConfirmationState(Arc::new(PendingConfirmations::new())))
+        // Phase 7 — LSP session registry.
+        .manage(LspState(Arc::new(Mutex::new(LspRegistry::new()))))
         .invoke_handler(tauri::generate_handler![
             check_secret_service,
             emit_mock_error,
@@ -77,6 +81,25 @@ pub fn run() {
             // Phase 6b — inline edit
             commands::chat::chat_inline_edit,
             commands::chat::chat_apply_inline_edit,
+            // Phase 7 — git panel
+            commands::git::git_status,
+            commands::git::git_stage,
+            commands::git::git_unstage,
+            commands::git::git_commit,
+            commands::git::git_push,
+            commands::git::git_pull,
+            commands::git::git_log,
+            commands::git::git_branches,
+            commands::git::git_checkout,
+            commands::git::git_diff_file,
+            commands::git::git_blame,
+            commands::git::git_diff_all,
+            // Phase 7 — LSP
+            commands::lsp::lsp_spawn,
+            commands::lsp::lsp_write,
+            commands::lsp::lsp_shutdown,
+            commands::lsp::lsp_list_sessions,
+            commands::lsp::lsp_detect_languages,
         ])
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();

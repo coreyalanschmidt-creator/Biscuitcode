@@ -14,6 +14,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { ChevronRight, ChevronDown, File, Folder, FolderOpen } from 'lucide-react';
 import { usePanelsStore } from '../state/panelsStore';
 import { useEditorStore } from '../state/editorStore';
+import { GitPanel } from './GitPanel';
 
 // ---------------------------------------------------------------------------
 // File tree types
@@ -573,6 +574,7 @@ export function SidePanel() {
     switch (activeActivity) {
       case 'files':  return <FilesPanel />;
       case 'search': return <FindInFilesPanel />;
+      case 'git':    return <GitPanel />;
       default:
         return (
           <div className="px-3 py-4 text-sm text-cocoa-300">

@@ -202,6 +202,61 @@
     "inlineEditError": "Failed to generate inline edit.",
     "inlineEditApplyError": "Failed to apply inline edit."
   },
+  "git": {
+    "noWorkspace": "No workspace open.",
+    "noRepo": "Not a git repository.",
+    "staged": "Staged",
+    "unstaged": "Unstaged",
+    "untracked": "Untracked",
+    "stageAll": "Stage all",
+    "unstageAll": "Unstage all",
+    "stageFile": "Stage {{path}}",
+    "unstageFile": "Unstage {{path}}",
+    "commitPlaceholder": "Commit message…",
+    "commitButton": "Commit",
+    "pushing": "Pushing…",
+    "pulling": "Pulling…",
+    "pushButton": "Push",
+    "pullButton": "Pull",
+    "pushFailed": "Push failed.",
+    "nothingToCommit": "Nothing staged.",
+    "branches": "Branches",
+    "switchBranch": "Switch branch",
+    "currentBranch": "Branch: {{branch}}",
+    "refreshing": "Refreshing…",
+    "blameGutter": "{{hash}} · {{author}} · {{date}}"
+  },
+  "lsp": {
+    "missing": "{{language}} server missing",
+    "copyInstall": "Copy install command",
+    "diagnosticsCount": "{{count}} problems",
+    "noDiagnostics": "No problems",
+    "active": "{{language}} LSP"
+  },
+  "preview": {
+    "title": "Preview",
+    "noFile": "No file open for preview.",
+    "unsupportedType": "Preview not available for this file type.",
+    "devtools": "DevTools",
+    "pageOf": "Page {{current}} of {{total}}",
+    "prevPage": "Previous page",
+    "nextPage": "Next page",
+    "notebookCell": "Cell {{n}}",
+    "notebookCode": "Code",
+    "notebookMarkdown": "Markdown",
+    "notebookOutput": "Output",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "zoomReset": "Reset zoom"
+  },
+  "mentions": {
+    "terminalOutput": "@terminal-output",
+    "problems": "@problems",
+    "gitDiff": "@git-diff",
+    "noTerminals": "No terminals open",
+    "noProblems": "No LSP diagnostics",
+    "noGitDiff": "No git changes"
+  },
   "onboarding": {
     "welcome": {
       "title": "Welcome to BiscuitCode",

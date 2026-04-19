@@ -23,6 +23,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { useAgentStore } from '../state/agentStore';
+import { useLspStore } from '../state/lspStore';
 
 // ---------- Types ----------
 
@@ -68,6 +69,10 @@ interface ChatEventPayload {
 interface MentionCandidate {
   path: string;
   label: string;
+  /** Non-file special mention type */
+  specialType?: 'terminal-output' | 'problems' | 'git-diff';
+  /** True if the mention source has no data and should be shown disabled */
+  disabled?: boolean;
 }
 
 // Placeholder workspace/conversation IDs for Phase 5.
@@ -105,6 +110,20 @@ export function ChatPanel() {
   const appendArgsDelta = useAgentStore((s) => s.appendArgsDelta);
   const endCard = useAgentStore((s) => s.endCard);
   const clearCards = useAgentStore((s) => s.clearCards);
+
+  // lspStore for @problems mention data availability check.
+  const lspDiagnostics = useLspStore((s) => s.diagnostics);
+
+  // Track whether any terminals are open (for @terminal-output availability).
+  const [hasTerminals, setHasTerminals] = useState(false);
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { open } = (e as CustomEvent).detail ?? {};
+      setHasTerminals(Boolean(open));
+    };
+    window.addEventListener('biscuitcode:terminal-count', handler);
+    return () => window.removeEventListener('biscuitcode:terminal-count', handler);
+  }, []);
 
   // Load models and check key on mount.
   useEffect(() => {
@@ -148,41 +167,129 @@ export function ChatPanel() {
 
   // ---------- Mention picker ----------
 
-  // Refresh candidates from workspace file list whenever the query changes.
+  // Refresh candidates from workspace file list + special mentions whenever query changes.
   useEffect(() => {
     if (!mentionOpen) return;
     let cancelled = false;
+
+    // Build special non-file mention candidates (always shown first when query is empty
+    // or matches the keyword).
+    const buildSpecials = (): MentionCandidate[] => {
+      const specials: MentionCandidate[] = [];
+      const q = mentionQuery.toLowerCase();
+      const matchesOrEmpty = (kw: string) => !q || kw.startsWith(q);
+
+      if (matchesOrEmpty('terminal-output')) {
+        specials.push({
+          path: '@terminal-output',
+          label: '@terminal-output',
+          specialType: 'terminal-output',
+          disabled: !hasTerminals,
+        });
+      }
+      if (matchesOrEmpty('problems')) {
+        specials.push({
+          path: '@problems',
+          label: '@problems',
+          specialType: 'problems',
+          disabled: lspDiagnostics.length === 0,
+        });
+      }
+      if (matchesOrEmpty('git-diff')) {
+        // git-diff is only useful when a workspace is open.
+        // Check via window global set by WorkspaceRoot context (EditorStore).
+        const hasWorkspace = Boolean(
+          (window as Window & { __BISCUIT_WORKSPACE_ROOT__?: string }).__BISCUIT_WORKSPACE_ROOT__
+        );
+        specials.push({
+          path: '@git-diff',
+          label: '@git-diff',
+          specialType: 'git-diff',
+          disabled: !hasWorkspace,
+        });
+      }
+      return specials;
+    };
+
     (async () => {
+      const specials = buildSpecials();
+
       try {
         const files = await invoke<string[]>('fs_search_files', {
           query: mentionQuery,
           limit: 20,
         });
         if (!cancelled) {
-          setMentionCandidates(
-            files.map((p) => ({ path: p, label: p.split('/').pop() ?? p })),
-          );
-          setMentionIndex(0);
+          const fileCandidates = files.map((p) => ({
+            path: p,
+            label: p.split('/').pop() ?? p,
+            disabled: false as boolean,
+          }));
+          const all = [...specials, ...fileCandidates];
+          setMentionCandidates(all);
+          // Start index on the first non-disabled candidate.
+          const firstEnabled = all.findIndex((c) => !c.disabled);
+          setMentionIndex(firstEnabled === -1 ? specials.length : firstEnabled);
         }
       } catch {
-        if (!cancelled) setMentionCandidates([]);
+        if (!cancelled) {
+          setMentionCandidates(specials);
+          const firstEnabled = specials.findIndex((c) => !c.disabled);
+          setMentionIndex(firstEnabled === -1 ? 0 : firstEnabled);
+        }
       }
     })();
     return () => { cancelled = true; };
-  }, [mentionOpen, mentionQuery]);
+  }, [mentionOpen, mentionQuery, hasTerminals, lspDiagnostics.length]);
 
-  /** Insert a @file:<path> token at the current @ position. */
-  const commitMention = useCallback((path: string) => {
+  /** Insert a mention token at the current @ position.
+   *
+   * Special mentions (@terminal-output, @problems, @git-diff) fetch their
+   * content inline so the LLM receives the actual data in the user message.
+   * File mentions use the @file:<path> token convention.
+   */
+  const commitMention = useCallback(async (candidate: MentionCandidate) => {
+    const { path, specialType, disabled } = candidate;
+    if (disabled) return;
+
+    let token: string;
+
+    if (specialType === 'terminal-output') {
+      // Request visible terminal buffer from TerminalPanel.
+      const event = new CustomEvent('biscuitcode:get-terminal-output', {});
+      window.dispatchEvent(event);
+      // TerminalPanel responds synchronously via a side-channel.
+      const output = (window as Window & { __BISCUIT_TERMINAL_OUTPUT__?: string }).__BISCUIT_TERMINAL_OUTPUT__ ?? '';
+      token = `\`\`\`terminal-output\n${output}\n\`\`\``;
+
+    } else if (specialType === 'problems') {
+      const diagLines = lspDiagnostics
+        .slice(0, 50) // cap at 50 to avoid huge prompts
+        .map((d) => `${d.path}:${d.line} — ${d.message}`)
+        .join('\n');
+      token = `\`\`\`problems\n${diagLines}\n\`\`\``;
+
+    } else if (specialType === 'git-diff') {
+      try {
+        const diff = await invoke<string>('git_diff_all');
+        token = diff ? `\`\`\`diff\n${diff}\n\`\`\`` : '(no git changes)';
+      } catch {
+        token = '(git diff unavailable)';
+      }
+
+    } else {
+      token = `@file:${path}`;
+    }
+
     setInput((prev) => {
-      // Replace the trailing "@<query>" with the resolved token.
       const atIdx = prev.lastIndexOf('@');
-      if (atIdx === -1) return `${prev}@file:${path} `;
-      return `${prev.slice(0, atIdx)}@file:${path} `;
+      if (atIdx === -1) return `${prev}${token} `;
+      return `${prev.slice(0, atIdx)}${token} `;
     });
     setMentionOpen(false);
     setMentionQuery('');
     textareaRef.current?.focus();
-  }, []);
+  }, [lspDiagnostics]);
 
   // ---------- Send ----------
 
@@ -386,18 +493,29 @@ export function ChatPanel() {
       if (mentionOpen) {
         if (e.key === 'ArrowDown') {
           e.preventDefault();
-          setMentionIndex((i) => Math.min(i + 1, mentionCandidates.length - 1));
+          setMentionIndex((i) => {
+            // Find next non-disabled candidate.
+            for (let j = i + 1; j < mentionCandidates.length; j++) {
+              if (!mentionCandidates[j].disabled) return j;
+            }
+            return i;
+          });
           return;
         }
         if (e.key === 'ArrowUp') {
           e.preventDefault();
-          setMentionIndex((i) => Math.max(i - 1, 0));
+          setMentionIndex((i) => {
+            for (let j = i - 1; j >= 0; j--) {
+              if (!mentionCandidates[j].disabled) return j;
+            }
+            return i;
+          });
           return;
         }
         if (e.key === 'Enter' || e.key === 'Tab') {
           e.preventDefault();
           const c = mentionCandidates[mentionIndex];
-          if (c) commitMention(c.path);
+          if (c) commitMention(c);
           else setMentionOpen(false);
           return;
         }
@@ -664,16 +782,30 @@ export function ChatPanel() {
                   key={c.path}
                   role="option"
                   aria-selected={i === mentionIndex}
+                  aria-disabled={c.disabled}
                   type="button"
-                  onClick={() => commitMention(c.path)}
+                  onClick={() => !c.disabled && commitMention(c)}
                   className={`w-full text-left px-3 py-1.5 text-xs font-mono ${
-                    i === mentionIndex
+                    c.disabled
+                      ? 'text-cocoa-500 cursor-not-allowed'
+                      : i === mentionIndex
                       ? 'bg-biscuit-500 text-cocoa-900'
                       : 'text-cocoa-100 hover:bg-cocoa-500'
                   }`}
                 >
                   {c.label}
-                  <span className="ml-2 text-cocoa-400 text-[10px]">{c.path}</span>
+                  {c.disabled && (
+                    <span className="ml-2 text-cocoa-500 text-[10px]">
+                      {c.specialType === 'terminal-output'
+                        ? t('mentions.noTerminals')
+                        : c.specialType === 'problems'
+                        ? t('mentions.noProblems')
+                        : ''}
+                    </span>
+                  )}
+                  {!c.specialType && !c.disabled && (
+                    <span className="ml-2 text-cocoa-400 text-[10px]">{c.path}</span>
+                  )}
                 </button>
               ))
             )}

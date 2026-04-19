@@ -1,7 +1,70 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "shell",
-  "description": "Shell access. Phase 1 baseline = empty (no commands). Each phase that needs shell-out (Phase 6a Ollama, Phase 7 LSP discovery, Phase 3 xdg-open) adds its specific commands here with strict argument validators. NEVER add a wildcard cmd. See docs/design/CAPABILITIES.md.",
+  "description": "Shell access. Phase 7: which + LSP binaries. Phase 6a: Ollama. Phase 3: xdg-open. NEVER add a wildcard cmd. See docs/design/CAPABILITIES.md.",
   "windows": ["main"],
-  "permissions": []
+  "permissions": [
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "which",
+          "cmd": "which",
+          "args": [
+            { "validator": "^(rust-analyzer|typescript-language-server|pyright-langserver|gopls|clangd)$" }
+          ]
+        },
+        {
+          "name": "rust-analyzer",
+          "cmd": "rust-analyzer",
+          "args": []
+        },
+        {
+          "name": "typescript-language-server",
+          "cmd": "typescript-language-server",
+          "args": [{ "validator": "^--stdio$" }]
+        },
+        {
+          "name": "pyright-langserver",
+          "cmd": "pyright-langserver",
+          "args": [{ "validator": "^--stdio$" }]
+        },
+        {
+          "name": "gopls",
+          "cmd": "gopls",
+          "args": []
+        },
+        {
+          "name": "clangd",
+          "cmd": "clangd",
+          "args": []
+        },
+        {
+          "name": "ollama",
+          "cmd": "ollama",
+          "args": [
+            { "validator": "^(list|show|--version)$" },
+            { "validator": "^pull$" },
+            { "validator": "^[a-z][a-z0-9._:-]*$" },
+            { "validator": "^serve$" }
+          ]
+        },
+        {
+          "name": "ollama-install",
+          "cmd": "sh",
+          "args": [
+            { "validator": "^-c$" },
+            { "validator": "^curl -fsSL https://ollama.com/install.sh \\| sh$" }
+          ]
+        },
+        {
+          "name": "xdg-open",
+          "cmd": "xdg-open",
+          "args": [
+            { "validator": "^(https?://|/[^\\s]+)" }
+          ]
+        }
+      ]
+    }
+  ]
 }
