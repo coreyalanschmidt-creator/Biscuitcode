@@ -13,8 +13,25 @@
 // Each subsequent phase that registers a new code adds its trigger here.
 // Phase 9 audits this file for completeness.
 
+import React from 'react';
 import { describe, expect, it } from 'vitest';
+import { render } from '@testing-library/react';
 import type { AppErrorPayload, ErrorCode } from '../src/errors/types';
+import { ToastLayer } from '../src/components/ToastLayer';
+
+// i18n must be initialised before rendering i18n-aware components.
+import i18n from 'i18next';
+import { initReactI18next } from 'react-i18next';
+import en from '../src/locales/en.json';
+
+if (!i18n.isInitialized) {
+  void i18n.use(initReactI18next).init({
+    resources: { en: { translation: en } },
+    lng: 'en',
+    fallbackLng: 'en',
+    interpolation: { escapeValue: false },
+  });
+}
 
 // ---------- Trigger registry ----------
 //
@@ -28,13 +45,38 @@ const TRIGGERS: Partial<Record<ErrorCode, TriggerFn>> = {
   // Phase 1 — wired here as the proof-of-concept. Forces a synthetic
   // KeyringMissing event and asserts the toast layer renders it.
   E001: async () => {
-    // Phase 1 coder fills in:
-    //   1. Mount <ToastLayer /> in a test renderer
-    //   2. window.dispatchEvent(new CustomEvent('biscuitcode:error-toast', {
-    //        detail: { code: 'E001', messageKey: 'errors.E001.msg', ... } }))
-    //   3. Assert getByRole('alert') text contains the i18n message
-    //   4. Return the payload that was dispatched
-    throw new Error('Phase 1 coder fills in E001 trigger');
+    // Mount the ToastLayer and dispatch a synthetic E001 event.
+    // Asserts: (a) role="alert" renders, (b) user-friendly message shown,
+    // (c) no raw stack trace in the rendered output.
+    const payload: AppErrorPayload = {
+      code: 'E001',
+      messageKey: 'errors.E001.msg',
+      recovery: {
+        kind: 'copy_command',
+        command: 'sudo apt install gnome-keyring libsecret-1-0 libsecret-tools',
+        label: 'Copy install command',
+      },
+    };
+
+    const { getByRole, queryByText } = render(React.createElement(ToastLayer));
+
+    window.dispatchEvent(
+      new CustomEvent('biscuitcode:error-toast', { detail: payload }),
+    );
+
+    // Wait for the toast to render (state update is synchronous here but
+    // give React one microtask to flush).
+    await new Promise((r) => setTimeout(r, 0));
+
+    const alert = getByRole('alert');
+    // Verify user-friendly message rendered (from en.json errors.E001.msg).
+    expect(alert.textContent).toContain('gnome-keyring');
+    // Verify no raw stack trace visible.
+    expect(queryByText(/at \w+ \(/)?.textContent).toBeUndefined();
+    // Verify the error code badge is shown.
+    expect(alert.textContent).toContain('E001');
+
+    return payload;
   },
 
   // E002 → E018 added by their owning phases. Until then, .skip.

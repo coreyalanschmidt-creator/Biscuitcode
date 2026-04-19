@@ -4,8 +4,9 @@
 // table is registered and dispatches either a real action or a placeholder
 // toast — none silently no-op.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
 import { SHORTCUTS } from '../../src/shortcuts/global';
+import { usePanelsStore } from '../../src/state/panelsStore';
 
 /**
  * Verbatim from `docs/vision.md` "Keyboard shortcuts" table. Synced with
@@ -55,4 +56,81 @@ describe('global shortcuts registry', () => {
   it('vision table size matches registry size (no drift)', () => {
     expect(Object.keys(SHORTCUTS).length).toBe(VISION_TABLE.length);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Handler dispatch tests — AC: "asserts either an action ran or the
+// placeholder toast fired. None silently no-op."
+//
+// Phase-2 real-action shortcuts mutate Zustand store state.
+// Placeholder shortcuts dispatch a `biscuitcode:toast` CustomEvent.
+// ---------------------------------------------------------------------------
+describe('shortcut handler dispatch', () => {
+  // Track toast events dispatched by placeholder handlers.
+  let toastEvents: CustomEvent[] = [];
+
+  beforeEach(() => {
+    toastEvents = [];
+    // Reset panels store to known defaults so toggle assertions are deterministic.
+    usePanelsStore.setState({
+      sideVisible: true,
+      bottomVisible: true,
+      chatVisible: true,
+    });
+    const listener = (e: Event) => { toastEvents.push(e as CustomEvent); };
+    window.addEventListener('biscuitcode:toast', listener);
+    // Clean up after this test by re-registering fresh each time.
+    return () => window.removeEventListener('biscuitcode:toast', listener);
+  });
+
+  it('Ctrl+B toggles side panel visibility', () => {
+    const before = usePanelsStore.getState().sideVisible;
+    SHORTCUTS['Ctrl+B'].handler(new KeyboardEvent('keydown'));
+    expect(usePanelsStore.getState().sideVisible).toBe(!before);
+  });
+
+  it('Ctrl+J toggles bottom panel visibility', () => {
+    const before = usePanelsStore.getState().bottomVisible;
+    SHORTCUTS['Ctrl+J'].handler(new KeyboardEvent('keydown'));
+    expect(usePanelsStore.getState().bottomVisible).toBe(!before);
+  });
+
+  it('Ctrl+Alt+C toggles chat panel visibility', () => {
+    const before = usePanelsStore.getState().chatVisible;
+    SHORTCUTS['Ctrl+Alt+C'].handler(new KeyboardEvent('keydown'));
+    expect(usePanelsStore.getState().chatVisible).toBe(!before);
+  });
+
+  it('Ctrl+Shift+P fires the open-command-palette event', () => {
+    const paletteEvents: Event[] = [];
+    const listener = (e: Event) => paletteEvents.push(e);
+    window.addEventListener('biscuitcode:open-command-palette', listener);
+    SHORTCUTS['Ctrl+Shift+P'].handler(new KeyboardEvent('keydown'));
+    window.removeEventListener('biscuitcode:open-command-palette', listener);
+    expect(paletteEvents.length).toBe(1);
+  });
+
+  // Placeholder shortcuts — must fire biscuitcode:toast (not silently no-op).
+  const placeholderCombos = [
+    'Ctrl+P',
+    'Ctrl+`',
+    'Ctrl+\\',
+    'Ctrl+K Ctrl+I',
+    'Ctrl+L',
+    'Ctrl+Shift+L',
+    'F1',
+  ] as const;
+
+  for (const combo of placeholderCombos) {
+    it(`${combo} fires a placeholder toast (not a silent no-op)`, () => {
+      const fired: CustomEvent[] = [];
+      const listener = (e: Event) => fired.push(e as CustomEvent);
+      window.addEventListener('biscuitcode:toast', listener);
+      SHORTCUTS[combo].handler(new KeyboardEvent('keydown'));
+      window.removeEventListener('biscuitcode:toast', listener);
+      expect(fired.length, `${combo} did not fire biscuitcode:toast`).toBe(1);
+      expect(fired[0].detail.kind).toBe('info');
+      expect(fired[0].detail.text).toContain('registered');
+    });
+  }
 });

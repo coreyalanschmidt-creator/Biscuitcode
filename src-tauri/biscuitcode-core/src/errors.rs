@@ -33,12 +33,18 @@ pub enum CatalogueError {
     /// Phase 3 — File op attempted outside the open workspace root.
     #[serde(rename = "E002")]
     #[error("E002 OutsideWorkspace: path {path} is not a descendant of the workspace root")]
-    OutsideWorkspace { path: String },
+    OutsideWorkspace {
+        /// The offending absolute path.
+        path: String,
+    },
 
     /// Phase 4 — `portable-pty` could not open a new PTY.
     #[serde(rename = "E003")]
     #[error("E003 PtyOpenFailed: {reason}")]
-    PtyOpenFailed { reason: String },
+    PtyOpenFailed {
+        /// Human-readable reason from the OS or pty crate.
+        reason: String,
+    },
 
     /// Phase 5 — Anthropic returned 401.
     #[serde(rename = "E004")]
@@ -48,78 +54,128 @@ pub enum CatalogueError {
     /// Phase 5 — Network failure to api.anthropic.com.
     #[serde(rename = "E005")]
     #[error("E005 AnthropicNetworkError: {reason}")]
-    AnthropicNetworkError { reason: String },
+    AnthropicNetworkError {
+        /// Description of the network failure.
+        reason: String,
+    },
 
     /// Phase 5 — Anthropic 429.
     #[serde(rename = "E006")]
     #[error("E006 AnthropicRateLimited (retry after {retry_after_seconds}s)")]
-    AnthropicRateLimited { retry_after_seconds: u64 },
+    AnthropicRateLimited {
+        /// Seconds until the rate limit resets (from `Retry-After` header).
+        retry_after_seconds: u64,
+    },
 
     /// Phase 6a — Ollama < 0.20.0; falling back to Gemma 3.
     #[serde(rename = "E007")]
     #[error("E007 GemmaVersionFallback: Gemma 4 unavailable on Ollama {ollama_version}; using {fallback_model}")]
     GemmaVersionFallback {
+        /// The detected Ollama version string.
         ollama_version: String,
+        /// The Gemma 3 model that was selected as a fallback.
         fallback_model: String,
     },
 
     /// Phase 6b — User declined a write-tool confirmation.
     #[serde(rename = "E008")]
     #[error("E008 WriteToolDenied: user declined {tool_name} on {path}")]
-    WriteToolDenied { tool_name: String, path: String },
+    WriteToolDenied {
+        /// The tool the agent attempted to invoke.
+        tool_name: String,
+        /// Target file path for the write.
+        path: String,
+    },
 
     /// Phase 6b — Shell tool tried a forbidden command.
     #[serde(rename = "E009")]
     #[error("E009 ShellForbiddenPrefix: blocked `{command}`")]
-    ShellForbiddenPrefix { command: String },
+    ShellForbiddenPrefix {
+        /// The blocked command string.
+        command: String,
+    },
 
     /// Phase 6b — Pre-write snapshot failed; write was NOT performed.
     #[serde(rename = "E010")]
     #[error("E010 SnapshotFailed: couldn't snapshot {path}: {reason}")]
-    SnapshotFailed { path: String, reason: String },
+    SnapshotFailed {
+        /// The file that couldn't be snapshotted.
+        path: String,
+        /// Reason for the failure.
+        reason: String,
+    },
 
     /// Phase 6b — Snapshot manifest references a missing/corrupt .bak file.
     #[serde(rename = "E011")]
     #[error("E011 RewindFailed: can't restore {path}: {reason}")]
-    RewindFailed { path: String, reason: String },
+    RewindFailed {
+        /// The file that couldn't be restored.
+        path: String,
+        /// Reason for the failure.
+        reason: String,
+    },
 
     /// Phase 7 — git push exited non-zero.
     #[serde(rename = "E012")]
     #[error("E012 GitPushFailed: {git_stderr}")]
-    GitPushFailed { git_stderr: String },
+    GitPushFailed {
+        /// Captured stderr from the git push process.
+        git_stderr: String,
+    },
 
     /// Phase 7 — LSP binary not on PATH.
     #[serde(rename = "E013")]
     #[error("E013 LspServerMissing: {language} ({install_command})")]
     LspServerMissing {
+        /// The language whose server is missing.
         language: String,
+        /// The install command to show the user.
         install_command: String,
     },
 
     /// Phase 7 — LSP server crash or malformed JSON-RPC.
     #[serde(rename = "E014")]
     #[error("E014 LspProtocolError: {language}: {reason}")]
-    LspProtocolError { language: String, reason: String },
+    LspProtocolError {
+        /// The language whose server crashed.
+        language: String,
+        /// Description of the protocol failure.
+        reason: String,
+    },
 
     /// Phase 7 — Preview render threw.
     #[serde(rename = "E015")]
     #[error("E015 PreviewRenderFailed: {file}: {reason}")]
-    PreviewRenderFailed { file: String, reason: String },
+    PreviewRenderFailed {
+        /// The file that failed to render.
+        file: String,
+        /// Reason for the render failure.
+        reason: String,
+    },
 
     /// Phase 8 — Self-hosted font failed to load (canary detected).
     #[serde(rename = "E016")]
     #[error("E016 FontLoadFailed: {font_family}")]
-    FontLoadFailed { font_family: String },
+    FontLoadFailed {
+        /// The CSS `font-family` name that failed to load.
+        font_family: String,
+    },
 
     /// Phase 9 — Update check failed.
     #[serde(rename = "E017")]
     #[error("E017 UpdateCheckFailed: {reason}")]
-    UpdateCheckFailed { reason: String },
+    UpdateCheckFailed {
+        /// Reason the update check failed (network error, API error, etc.).
+        reason: String,
+    },
 
     /// Phase 9 — Update download failed.
     #[serde(rename = "E018")]
     #[error("E018 UpdateDownloadFailed: {reason}")]
-    UpdateDownloadFailed { reason: String },
+    UpdateDownloadFailed {
+        /// Reason the download failed.
+        reason: String,
+    },
 }
 
 impl CatalogueError {

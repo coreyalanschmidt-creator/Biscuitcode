@@ -1,0 +1,66 @@
+[package]
+name = "biscuitcode"
+version = "0.1.0"
+description = "BiscuitCode — an AI coding environment, served warm."
+authors = ["Corey Alan Schmidt"]
+edition = "2021"
+license = "MIT"
+publish = false
+
+[workspace]
+members = [
+    ".",
+    "biscuitcode-core",
+    "biscuitcode-providers",
+    "biscuitcode-db",
+    "biscuitcode-pty",
+    "biscuitcode-agent",
+    "biscuitcode-lsp",
+]
+
+[lib]
+name = "biscuitcode_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2.10", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-os = "2"
+tauri-plugin-window-state = "2"
+tauri-plugin-process = "2"
+
+# Phase 1 — shared primitives. Only biscuitcode-core wired to the main
+# binary this phase. Others are declared as workspace members but remain
+# as standalone libraries until their owning phases wire them.
+biscuitcode-core = { path = "biscuitcode-core" }
+
+# Async + serde
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Errors
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Phase 3 — file-tree + cross-file search
+ignore = "0.4"   # gitignore-respecting walker
+regex = "1"      # used in fs_search_content for regex mode
+
+[dev-dependencies]
+tempfile = "3"   # ephemeral temp dirs in fs.rs unit tests
+
+[features]
+default = []
+# Enable tray icon support — gated since libayatana-appindicator3-1 is
+# only a Recommends, not a Depends, on Mint 22.
+tray-icon = ["tauri/tray-icon"]

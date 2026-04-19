@@ -8,10 +8,7 @@
 //   - Notebook (.ipynb) read-only render
 //   - Auto-open trigger from Phase 6b AI edits to .md/.html/.svg/image
 
-import { useTranslation } from 'react-i18next';
-
 export function PreviewPanel() {
-  const { t } = useTranslation();
   return (
     <section
       aria-label="Preview"
