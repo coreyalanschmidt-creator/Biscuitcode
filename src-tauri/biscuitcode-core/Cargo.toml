@@ -25,6 +25,15 @@ thiserror = "1.0"
 # small-footprint choice.
 serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
 
+# Phase 5 — system keyring via libsecret (Secret Service DBus API).
+# Features: async-secret-service = D-Bus async backend; crypto-rust = pure-Rust
+# encryption (no OpenSSL dep); linux-native = Linux keyring support;
+# tokio = async runtime integration.
+# Note: plan.md named "linux-native-async-persistent" which does not exist;
+# the correct feature set on keyring 3.x is the four below.
+keyring = { version = "3", features = ["async-secret-service", "crypto-rust", "linux-native", "tokio"] }
+tokio = { version = "1", features = ["rt", "macros"] }
+
 [lib]
 name = "biscuitcode_core"
 path = "src/lib.rs"

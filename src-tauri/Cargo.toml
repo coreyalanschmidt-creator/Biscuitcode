@@ -38,6 +38,12 @@ tauri-plugin-process = "2"
 biscuitcode-core = { path = "biscuitcode-core" }
 # Phase 4 — PTY backend.
 biscuitcode-pty = { path = "biscuitcode-pty" }
+# Phase 5 — providers + DB.
+biscuitcode-providers = { path = "biscuitcode-providers" }
+biscuitcode-db = { path = "biscuitcode-db" }
+
+# Phase 5 — futures for streaming Tauri events
+futures = "0.3"
 
 # Async + serde
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }

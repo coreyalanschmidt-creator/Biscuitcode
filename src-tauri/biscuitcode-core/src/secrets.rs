@@ -4,17 +4,19 @@
 //! are emphatic: API keys live in libsecret ONLY. No plaintext fallback.
 //! No env vars. No stronghold. No anything else.
 //!
-//! Phase 5 coder fills in the actual `keyring::Entry` calls once the
-//! exact 3.6.x feature-flag incantation is confirmed against the crate's
-//! current docs. The API surface here is locked so the settings UI and
-//! provider layer can be written against it before the impl lands.
-//!
 //! **Pre-flight contract (docs/design/CAPABILITIES.md; synthesis log):**
 //! every call path that might touch the Secret Service must first call
 //! [`secret_service_available`]. That function uses a **read-only
 //! DBus name-check** (`busctl --user list`) — it NEVER activates the
 //! daemon with a known credential, which `keyring::Entry::get_password`
 //! would do as a side-effect on some Linux distributions.
+//!
+//! **API shape note:** the public `async fn` wrappers call the synchronous
+//! `keyring::Entry` methods (keyring 3.x's public API is sync even with the
+//! `async-secret-service` feature, which only affects internal D-Bus I/O).
+//! The `async` signature is preserved so callers (Tauri commands, future
+//! async contexts) don't have to change when keyring eventually exposes
+//! async surface.
 
 use crate::CatalogueError;
 use std::process::Command;
@@ -48,32 +50,48 @@ pub fn secret_service_available() -> Result<bool, CatalogueError> {
     Ok(stdout.contains("org.freedesktop.secrets"))
 }
 
-/// Store a secret for (service, key). Phase 5 coder fills in with
-/// `keyring::Entry::new(service, key).set_password(value)`.
+/// Store a secret for (service, key).
 ///
 /// Requires [`secret_service_available`] returned `Ok(true)` for the
 /// current session. Call that BEFORE this; if false, surface E001.
-pub async fn set(service: &str, key: &str, _value: &str) -> Result<(), CatalogueError> {
-    let _ = (service, key, _value);
-    // ---- Phase 5 coder fills in ----
-    // The exact keyring::Entry::new signature depends on the feature-flag
-    // set in biscuitcode-core/Cargo.toml (see plan: "linux-native-async-
-    // persistent + async-secret-service + crypto-rust + tokio"). Phase 5
-    // coder's job to pick the flags that match the installed keyring 3.6.x.
-    Err(CatalogueError::KeyringMissing)
+pub async fn set(service: &str, key: &str, value: &str) -> Result<(), CatalogueError> {
+    let entry = keyring::Entry::new(service, key)
+        .map_err(|_| CatalogueError::KeyringMissing)?;
+    entry.set_password(value).map_err(keyring_err_to_catalogue)
 }
 
 /// Retrieve a secret. Returns `Ok(None)` when the key is absent;
 /// `Err(KeyringMissing)` when the Secret Service itself is down.
 pub async fn get(service: &str, key: &str) -> Result<Option<String>, CatalogueError> {
-    let _ = (service, key);
-    Err(CatalogueError::KeyringMissing)
+    let entry = keyring::Entry::new(service, key)
+        .map_err(|_| CatalogueError::KeyringMissing)?;
+    match entry.get_password() {
+        Ok(v) => Ok(Some(v)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(keyring_err_to_catalogue(e)),
+    }
 }
 
 /// Delete a secret. No-op if the key didn't exist (idempotent).
 pub async fn delete(service: &str, key: &str) -> Result<(), CatalogueError> {
-    let _ = (service, key);
-    Err(CatalogueError::KeyringMissing)
+    let entry = keyring::Entry::new(service, key)
+        .map_err(|_| CatalogueError::KeyringMissing)?;
+    match entry.delete_credential() {
+        Ok(()) => Ok(()),
+        Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(keyring_err_to_catalogue(e)),
+    }
+}
+
+fn keyring_err_to_catalogue(e: keyring::Error) -> CatalogueError {
+    match e {
+        keyring::Error::NoStorageAccess(_) | keyring::Error::PlatformFailure(_) => {
+            CatalogueError::KeyringMissing
+        }
+        other => CatalogueError::AnthropicNetworkError {
+            reason: format!("keyring: {other}"),
+        },
+    }
 }
 
 #[cfg(test)]

@@ -11,7 +11,9 @@
 mod commands;
 
 use biscuitcode_core::errors::CatalogueError;
+use biscuitcode_db::Database;
 use biscuitcode_pty::PtyRegistry;
+use commands::chat::ChatDb;
 use commands::fs::WorkspaceState;
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
@@ -37,6 +39,8 @@ pub fn run() {
         // ----------------------------------------
         .manage(WorkspaceState(Mutex::new(None)))
         .manage(Arc::new(PtyRegistry::new()))
+        // Phase 5 — DB state (None until setup initialises it).
+        .manage(ChatDb(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             check_secret_service,
             emit_mock_error,
@@ -53,15 +57,39 @@ pub fn run() {
             commands::terminal::terminal_input,
             commands::terminal::terminal_resize,
             commands::terminal::terminal_close,
+            // Phase 5 — chat + keyring + DB
+            commands::chat::anthropic_key_present,
+            commands::chat::anthropic_set_key,
+            commands::chat::anthropic_delete_key,
+            commands::chat::anthropic_list_models,
+            commands::chat::chat_create_conversation,
+            commands::chat::chat_list_conversations,
+            commands::chat::chat_list_messages,
+            commands::chat::chat_send,
         ])
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
 
             // Decorations off: custom titlebar renders in HTML.
-            // NOTE: on Linux/WebKitGTK the shadow/roundcorners come from
-            // the compositor; no extra Tauri config required.
             let _ = window.set_decorations(false);
             let _ = window.set_title("BiscuitCode");
+
+            // Phase 5 — open/create the SQLite DB in the app data dir.
+            // tauri::api::path is the v2 way; we use Manager::path().
+            if let Ok(data_dir) = app.path().app_data_dir() {
+                let _ = std::fs::create_dir_all(&data_dir);
+                let db_path = data_dir.join("biscuitcode.db");
+                match Database::open(&db_path) {
+                    Ok(db) => {
+                        let state = app.state::<ChatDb>();
+                        *state.0.lock().unwrap() = Some(db);
+                        tracing::info!("database opened at {}", db_path.display());
+                    }
+                    Err(e) => {
+                        tracing::error!("failed to open database: {e}");
+                    }
+                }
+            }
 
             Ok(())
         })

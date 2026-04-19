@@ -16,6 +16,7 @@
 #![warn(missing_docs)]
 
 pub mod migrations;
+pub mod queries;
 pub mod types;
 
 pub use types::{

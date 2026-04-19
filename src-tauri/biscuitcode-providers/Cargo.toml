@@ -35,6 +35,10 @@ thiserror = "1.0"
 # SSE parsing for Anthropic + OpenAI Chat Completions
 eventsource-stream = "0.2"
 
+# Stream building — async generator-style macro; cleaner than unfold for
+# complex state machines like the Anthropic SSE translator.
+async-stream = "0.3"
+
 # Logging — Phase 5 turns this on; Phase 1 left it minimal.
 tracing = "0.1"
 

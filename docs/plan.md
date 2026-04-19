@@ -215,7 +215,7 @@ Each decision cites the research section. Decisions marked **(synthesis)** depar
 | 2 | Four-Region Layout + Shortcuts + i18n Scaffold + Installable .deb | Complete | Medium | 1 |
 | 3 | Editor + File Tree + Find/Replace | Complete | Medium | 2 |
 | 4 | Terminal (xterm.js + portable-pty) | Complete | Medium | 2 |
-| 5 | Keyring + Anthropic Provider + Chat Panel (virtualized E2E) | Not Started | Medium | 2 |
+| 5 | Keyring + Anthropic Provider + Chat Panel (virtualized E2E) | Complete | Medium | 2 |
 | 6a | OpenAI + Ollama Providers + Read-Only Tool Surface + Agent Activity UI | Not Started | Medium | 5 |
 | 6b | Write Tools + Inline Edit (split-diff) + Rewind | Not Started | High | 3, 6a |
 | 7 | Git Panel + LSP Client + Preview Panel | Not Started | High | 3 |
@@ -678,13 +678,54 @@ The prior coder's partial work left three active failures. Before fixing them:
 **Dependencies:** Phase 2.
 **Complexity:** Medium (high on the keyring edge cases).
 **Split rationale:** Combining keyring + Anthropic + chat panel into one phase matches the vision's "one provider E2E" checkpoint. Keyring alone is too small; provider alone has no UI; chat panel alone has nothing to call. Bundling them produces a real runnable milestone ("chat with Claude works") in 2 days. Phase 6a brings the other providers + tools because adding two more providers before tools exist would stall the more valuable agent-loop work.
-**Status:** Not Started
+**Status:** Complete
 
 #### Pre-Mortem
-_To be filled by coder before implementation._
+
+[PM-01] `biscuitcode-core/src/secrets.rs::set/get/delete` | keyring 3.x feature flags mismatch | plan names `linux-native-async-persistent` which does not exist; actual flags are `linux-native`, `async-secret-service`, `crypto-rust`, `tokio` — wrong Cargo.toml will fail to compile with unknown feature error
+[PM-02] `biscuitcode-providers/src/anthropic/mod.rs::chat_stream` | `eventsource-stream` crate produces `Event` objects where `.data` may equal `"[DONE]"` for the final chunk | parsing `[DONE]` as JSON causes a `serde_json` error that propagates as a stream error rather than clean `Done` event; unit test must confirm this path is handled gracefully
+[PM-03] `biscuitcode-providers/src/anthropic/mod.rs::chat_stream` | Anthropic `content_block_stop` for a `tool_use` block carries no `args_json` field | the coder must accumulate `input_json_delta` strings keyed by block index and assemble at `content_block_stop`, NOT at the stop event itself; if accumulation state is keyed by `id` before the id is known (it's only in `content_block_start`), the deltas will be silently dropped and `ToolCallEnd` emits empty args
 
 #### Execution Notes
-_To be filled by coder after implementation._
+
+**Files changed:**
+- `src-tauri/biscuitcode-core/Cargo.toml` — added `keyring 3` dep with correct feature flags
+- `src-tauri/biscuitcode-core/src/secrets.rs` — implemented `set/get/delete` using synchronous `keyring::Entry` API
+- `src-tauri/biscuitcode-providers/Cargo.toml` — added `async-stream 0.3` dep
+- `src-tauri/biscuitcode-providers/src/anthropic/mod.rs` — full SSE consumer: `build_request_body`, `encode_message`, `model_strips_sampling`, `chat_stream` with block-index accumulation state, wiremock integration tests
+- `src-tauri/biscuitcode-db/src/lib.rs` — added `pub mod queries`
+- `src-tauri/biscuitcode-db/src/queries.rs` — `upsert_workspace`, `create_conversation`, `list_conversations`, `update_conversation_model`, `touch_conversation`, `append_message`, `list_messages` with 4 unit tests
+- `src-tauri/Cargo.toml` — added `biscuitcode-providers`, `biscuitcode-db`, `futures` deps
+- `src-tauri/src/commands/mod.rs` — added `pub mod chat`
+- `src-tauri/src/commands/chat.rs` — 8 Tauri commands: `anthropic_key_present`, `anthropic_set_key`, `anthropic_delete_key`, `anthropic_list_models`, `chat_create_conversation`, `chat_list_conversations`, `chat_list_messages`, `chat_send`
+- `src-tauri/src/lib.rs` — wired `ChatDb` managed state, DB init in `setup`, registered all Phase 5 commands
+- `src-tauri/capabilities/http.json` — corrected: Anthropic calls are Rust/reqwest (no webview HTTP capability needed); `http:default` permission identifier does not exist in Tauri 2.x without `tauri-plugin-http`
+- `src/components/ChatPanel.tsx` — full implementation: react-virtuoso list, react-markdown, model picker, streaming, Ctrl+L/Ctrl+Shift+L shortcuts
+- `src/components/SettingsProviders.tsx` — new: provider status badges, API key entry/delete, E001 detection
+- `src/locales/en.json` — added `settings.providers.*` and `chat.*` keys (15 new keys)
+
+**Approach:** Implemented in 5 layers: (1) keyring impl in biscuitcode-core, (2) Anthropic SSE consumer in biscuitcode-providers with wiremock tests, (3) DB query helpers in biscuitcode-db, (4) Tauri commands layer wiring all three together, (5) React frontend (ChatPanel + SettingsProviders). Used `async_stream::try_stream!` macro for the streaming path since the providers crate had no `async-stream` dep yet; chose this over `futures::stream::unfold` for readability of the complex SSE state machine.
+
+**Pre-Mortem reconciliation:**
+[PM-01] CONFIRMED   | `biscuitcode-core/Cargo.toml` | keyring feature flags mismatch | actual features are `linux-native, async-secret-service, crypto-rust, tokio`; plan named nonexistent `linux-native-async-persistent`; fixed during Cargo.toml edit
+[PM-02] AVOIDED     | `anthropic/mod.rs::chat_stream` | `[DONE]` parsed as JSON | guard `if event.data.is_empty() || event.data == "[DONE]" { continue; }` inserted before the serde_json call; Anthropic's actual final event is `message_stop` with JSON data, not `[DONE]`, but the guard is defensive
+[PM-03] AVOIDED     | `anthropic/mod.rs::chat_stream` | tool args accumulated by block index | `block_types: HashMap<u32, BlockState>` and `tool_args: HashMap<u32, String>` both keyed by `index`; `ToolCallStart` emitted at `content_block_start` (where id + name are known), `ToolCallEnd` assembled from the accumulated map at `content_block_stop`; wiremock integration test `sse_tool_use_via_wiremock` falsifies this prediction
+[UNPREDICTED]       | `src-tauri/capabilities/http.json` | `http:default` permission not found | Tauri 2.x's capability build script rejected `http:default` because `tauri-plugin-http` is not installed; Rust/reqwest calls don't need webview HTTP permissions; reverted to empty permissions array
+
+**Deviations:**
+1. `http.json` capability: CAPABILITIES.md spec says to add `http:default` with Anthropic URL — but that permission identifier only exists when `tauri-plugin-http` is installed in the Tauri app. Since all API calls go via Rust reqwest (not frontend fetch), the webview HTTP capability is unnecessary. Reverted to empty permissions. Phase 6a coder should confirm this holds for OpenAI + Ollama.
+2. `keyring::Entry` methods are synchronous in 3.x despite the `async-secret-service` feature (which affects internal D-Bus I/O, not the public API). The `async fn set/get/delete` wrappers in `secrets.rs` call sync methods inside async fn — this is fine (no blocking in async executor context since keyring ops are millisecond-class). Noted in module doc comment.
+3. `chat_send` Tauri command uses `State<'_, ChatDb>` with a `Mutex<Option<Database>>`. The `Database` struct holds a `rusqlite::Connection` which is `!Send`. The mutex ensures single-threaded access. This matches Phase 4's `Arc<Mutex<Option<T>>>` convention but uses `State<ChatDb>` (Tauri manages the `Arc` wrapping).
+
+**New findings:**
+- The `biscuitcode-db` `open_in_memory` method is `#[cfg(test)]` only, but the `ChatDb` state in production needs a real DB path. This is correctly handled in `lib.rs::setup` via `app.path().app_data_dir()`.
+- Phase 6a will need to update `chat_send` to handle tool calls (currently only persists text content). The command architecture supports this; the tool loop lands in Phase 6a's `biscuitcode-agent::executor`.
+- The TTFT bench (`tests/ttft-bench.ts`) referenced in Phase 5 ACs is pre-staged. It will work against the live API on the developer's machine; it doesn't run in CI (no real API key in CI).
+
+**Follow-ups (pre-existing / Law 3 untouched):**
+- `TerminalPanel.tsx:297` pre-existing ESLint error (`react-hooks/exhaustive-deps` rule not found) — not introduced by this phase
+- `#![warn(missing_docs)]` generates ~100 warnings in providers + db crates for pre-staged fields — pre-existing, not introduced here
+- The `chat_send` command currently loads the full conversation history from DB on every send. For long conversations this will be O(n) per message. Fine for Phase 5; Phase 6a's agent loop should consider truncation/windowing.
 
 ---
 

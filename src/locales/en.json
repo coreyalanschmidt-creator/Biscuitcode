@@ -134,6 +134,39 @@
     }
   },
 
+  "settings": {
+    "providers": {
+      "title": "Models & Providers",
+      "statusActive": "Active",
+      "statusUntested": "Untested",
+      "statusNoKey": "No key",
+      "addKey": "Add key",
+      "addKeyLabel": "Add API key for {{name}}",
+      "removeKey": "Remove key",
+      "deleteKey": "Remove API key for {{name}}",
+      "saveFailed": "Failed to save key.",
+      "anthropicKeyLabel": "Anthropic API key",
+      "landsInPhase": "Lands in Phase {{phase}}"
+    }
+  },
+
+  "chat": {
+    "you": "You",
+    "assistant": "Assistant",
+    "modelPickerLabel": "Select model",
+    "newChat": "New chat (Ctrl+Shift+L)",
+    "emptyHint": "Type a message below to start chatting with Claude.",
+    "inputLabel": "Chat message",
+    "inputPlaceholder": "Message Claude… (Enter to send, Shift+Enter for newline)",
+    "shortcutHint": "Ctrl+L — quote selection • Ctrl+Shift+L — new chat",
+    "sendButton": "Send",
+    "sending": "Sending…",
+    "noKeyBanner": "No Anthropic API key set. Go to Settings → Models to add one.",
+    "errorNoKey": "No API key configured. Add one in Settings → Models.",
+    "errorStream": "Stream error ({{code}}). Check your connection.",
+    "errorSend": "Failed to send message. Check your connection."
+  },
+
   "onboarding": {
     "welcome": {
       "title": "Welcome to BiscuitCode",

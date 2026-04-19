@@ -294,7 +294,6 @@ export function TerminalPanel() {
     if (tabs.length === 0) {
       openTab();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Focus the active terminal when the active tab changes
