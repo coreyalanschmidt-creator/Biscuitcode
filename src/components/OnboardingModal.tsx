@@ -12,7 +12,7 @@
 //
 // State stored in localStorage under 'biscuitcode-onboarded'.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog';
@@ -299,8 +299,74 @@ interface OnboardingModalProps {
   onComplete: () => void;
 }
 
+// Selector for all focusable elements — used by the focus trap.
+const FOCUSABLE = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(', ');
+
 export function OnboardingModal({ onComplete }: OnboardingModalProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Remember the element that had focus before the modal opened.
+  const previousFocusRef = useRef<Element | null>(null);
+
+  // Focus trap + Escape handler + restore focus on unmount.
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement;
+
+    // Move focus into the modal on mount.
+    const focusFirst = () => {
+      const el = dialogRef.current?.querySelector<HTMLElement>(FOCUSABLE);
+      el?.focus();
+    };
+    focusFirst();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!dialogRef.current) return;
+      if (e.key === 'Escape') {
+        // Onboarding cannot be dismissed via Escape — it's a blocking flow.
+        // Swallow the event so it doesn't propagate.
+        e.preventDefault();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE),
+      ).filter((el) => el.offsetParent !== null);
+
+      if (focusable.length === 0) { e.preventDefault(); return; }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      // Restore focus to the previously focused element on unmount.
+      if (previousFocusRef.current && 'focus' in previousFocusRef.current) {
+        (previousFocusRef.current as HTMLElement).focus();
+      }
+    };
+  }, []);
 
   const handleStep2Skip = () => {
     // Skip leaves all badges red but lets the user proceed.
@@ -321,6 +387,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
       aria-modal="true"
       aria-label="BiscuitCode onboarding"
       data-testid="onboarding-modal"
+      ref={dialogRef}
     >
       <div
         className="w-full max-w-md bg-cocoa-700 border border-cocoa-500 rounded-xl shadow-2xl p-8"

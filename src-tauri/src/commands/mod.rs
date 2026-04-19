@@ -6,6 +6,7 @@
 //! Phase 6b adds the `agent` module for confirmation + rewind commands.
 //! Phase 7 adds the `git` module (git panel) and `lsp` module (language servers).
 //! Phase 8 adds the `conversations` module (export/import/cleanup/branching).
+//! Phase 9 adds the `update` module (auto-update wiring).
 
 pub mod agent;
 pub mod chat;
@@ -14,3 +15,4 @@ pub mod fs;
 pub mod git;
 pub mod lsp;
 pub mod terminal;
+pub mod update;

@@ -24,7 +24,17 @@
       }
     ],
     "security": {
-      "capabilities": ["core", "fs", "shell", "http"]
+      "capabilities": ["core", "fs", "shell", "http", "updater"]
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/Coreyalanschmidt-creator/biscuitcode/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": ""
     }
   },
   "bundle": {

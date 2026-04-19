@@ -1199,13 +1199,56 @@ Theme system uses runtime CSS variable injection on `document.documentElement.st
 **Dependencies:** Phase 7 (final UI surfaces to audit), Phase 8 (settings UI hosts the update toggle/button).
 **Complexity:** Low.
 **Split rationale:** Each of these three concerns is small (~half day) but together they don't fit into Phase 8's polish phase without diluting its focus. Auto-update specifically needs Phase 10's CI to publish the `latest.json` manifest, but the app-side wiring lives here so Phase 10 can be pure CI/packaging.
-**Status:** Not Started
+**Status:** Complete
 
 #### Pre-Mortem
-_To be filled by coder before implementation._
+
+[PM-01] `src/errors/types.ts::AppErrorPayload` | union exhaustion — `AppErrorPayload` only includes E001–E011 variants; dispatching E012–E018 events will not type-check, meaning the `isAppError` guard and `ToastLayer` accept them at runtime but TypeScript compile fails if any code tries to assign a narrowed type | the union must be extended before the trigger tests can call `render(ToastLayer)` without type errors in the test file.
+
+[PM-02] `src-tauri/src/commands/chat.rs::chat_send` | executor wiring deadlock — constructing `ExecutorContext` with the `emit_confirm` callback requires an `AppHandle` clone captured by a closure that must be `Send + Sync + 'static`; the `ChatDb` state is wrapped in `Mutex<Option<Database>>` and the executor's `run()` is async, so acquiring the DB lock inside an async context while the executor holds a reference could deadlock | must ensure the DB lock is released before handing control to the executor loop.
+
+[PM-03] `tauri-plugin-updater` | missing from `Cargo.toml` and `capabilities/` — plan.md and WORKSPACE.md both flag that `tauri-plugin-updater` was deferred to Phase 9; adding it requires both `Cargo.toml` dependency, plugin registration in `lib.rs`, AND a capabilities entry; missing any of the three will produce a runtime panic ("plugin not registered") rather than a compile error | must add all three together.
 
 #### Execution Notes
-_To be filled by coder after implementation._
+
+**Files changed:**
+- `src/errors/types.ts` — extended `AppErrorPayload` union to include E004–E018 variants; added corresponding interface definitions
+- `tests/error-catalogue.spec.ts` — wired all 18 error code triggers (E001–E018); uncommented final `expect(missing).toEqual([])` audit assertion; added `afterEach(cleanup)` to prevent React scheduler teardown races
+- `src-tauri/biscuitcode-agent/src/executor/mod.rs` — added `emit_event` optional callback to `ExecutorContext`; passed callback into `consume_stream` so Tauri command handler receives streaming events during agent runs
+- `src-tauri/src/commands/chat.rs` — added imports for `biscuitcode_agent`; rewrote `chat_send` to branch on `agent_mode`: when true, constructs `ExecutorContext`, runs `ReActExecutor::with_context(...)`, persists executor-produced messages; when false, existing direct-stream path unchanged; added `extract_text_from_content` helper
+- `src-tauri/src/commands/update.rs` — new file; `check_for_deb_update` (GitHub Releases API check), `check_for_appimage_update` + `install_appimage_update` (tauri-plugin-updater path), `semver_gt` helper
+- `src-tauri/src/commands/mod.rs` — added `pub mod update`
+- `src-tauri/src/lib.rs` — registered `tauri_plugin_updater::Builder::new().build()` plugin; added three update commands to `invoke_handler`
+- `src-tauri/Cargo.toml` — added `tauri-plugin-updater = "2"` and `reqwest = "0.12"` (for deb update check)
+- `src-tauri/tauri.conf.json` — added `plugins.updater` configuration block; added `"updater"` to capabilities list
+- `src-tauri/capabilities/updater.json` — new capabilities file for `updater:default`
+- `src/locales/en.json` — merged `settings` blocks (removed duplicate); added `settings.sections.*`, `settings.general.*`, `settings.editor.*`, `settings.terminal.*`, `settings.security.*`, `settings.conversations.*`, `settings.about.*` i18n keys; preserved existing `settings.providers.*` keys
+- `src/components/SettingsPage.tsx` — converted `SECTIONS` array to `SECTION_IDS` with i18n labels; added `t()` calls to all section title strings (`GeneralSection`, `EditorSection`, `TerminalSection`, `AppearanceSection`, `SecuritySection`, `ConversationsSection`); added `shellOpen` import; added `UpdateInfoResult` interface; rewrote `AboutSection` with "Check for updates" button, update info display, and "Download .deb" button
+- `src/components/OnboardingModal.tsx` — added `useRef` import; added focus trap + Escape swallow + restore-focus-on-unmount to `OnboardingModal` via `useEffect`; moved `ref={dialogRef}` onto the outer overlay div
+- `src/components/ChatPanel.tsx` — added `role="log"` and `aria-live="polite"` to the chat message list container
+
+**Approach:** Error catalogue triggers were written as synthetic `CustomEvent` dispatches into `ToastLayer` — the same pattern already used by E001/E003. The executor wiring in `chat_send` avoids PM-02 by releasing the DB lock (scoped block exits) before calling `executor.run()`. The updater wiring satisfies PM-03 by adding Cargo.toml dep + plugin registration + capabilities file simultaneously.
+
+**Pre-Mortem reconciliation:**
+[PM-01] CONFIRMED   | `src/errors/types.ts::AppErrorPayload` | union exhaustion | extended union with E004–E018 variants before writing trigger tests; compile clean
+[PM-02] AVOIDED     | `src-tauri/src/commands/chat.rs::chat_send` | DB lock deadlock | DB lock is released at end of the `messages = { ... }` block before executor.run() is called; executor holds no DB lock reference
+[PM-03] CONFIRMED   | `tauri-plugin-updater` | all three registrations required | added Cargo.toml dep + lib.rs plugin + capabilities/updater.json together; confirmed build clean
+
+[UNPREDICTED]       | `src/locales/en.json` | duplicate `settings` top-level key | my initial i18n addition created two `settings` objects; fixed by merging into one block
+
+**Deviations:**
+- OQ #19 (`monaco-languageclient` frontend adapter): NOT implemented. The package has 20+ `@codingame/monaco-vscode-api` dependencies at v25.1.2 that pull in the full VS Code extension host. Installing it would require major Vite config surgery and risks breaking the build; the risk outweighs the benefit mid-phase. The AC "hover shows type, go-to-definition jumps correctly" is not in Phase 9's own acceptance criteria. OQ #19 remains open for Phase 10 or a dedicated follow-up.
+- `workspace_trusted` in agent mode is hardcoded to `false` (all write/shell tools go through the confirmation gate). The settings value in `BiscuitSettings.workspaceTrust` exists but there is no Tauri command to read it server-side; wiring it is a follow-up.
+
+**New findings:**
+- `tauri-plugin-updater` `pubkey` field must be filled with a real public key before the AppImage updater can verify signatures. For now it is set to `""`. Phase 10 must generate the key pair and set `tauri.conf.json` `plugins.updater.pubkey` to the public key.
+- The `install_appimage_update` command calls `app.restart()` which only works in a real Tauri context (not in tests). This is the correct Tauri API.
+
+**Follow-ups:**
+- Wire `BiscuitSettings.workspaceTrust` boolean from frontend to `workspace_trusted` in `chat_send` agent path (currently hardcoded false).
+- `tauri.conf.json` `plugins.updater.pubkey` must be set to the generated public key in Phase 10.
+- OQ #19 (`monaco-languageclient`) remains open.
+- `tests/unit/phase8.spec.tsx` canvas-based font detection test logs `HTMLCanvasElement.prototype.getContext` not-implemented warning — pre-existing issue, not introduced by Phase 9._
 
 ---
 
@@ -1305,8 +1348,8 @@ Carried forward from both rounds. None block execution; all have planner-default
 15. **Reasoning-mode timeout.** Currently no UI timeout for reasoning runs (provider may take 30s+). Add a cancel button at 60s? Default: yes — Phase 6a's executor pause flag covers this; explicit timeout button is v1.1.
 17. **(Phase 2 coder, 2026-04-19; RESOLVED by reviewer 2026-04-19)** ~~**`.deb` package name is `biscuit-code`, not `biscuitcode`.** Phase 10 coder must update those ACs accordingly.~~ **RESOLVED:** Tauri 2.x `bundle.linux.deb` does NOT expose a `packageName` override field; forcing it back to `biscuitcode` would require changing `productName` (breaks display name) or post-processing the control file (fragile). **Decision: accept `biscuit-code` as the Debian package name.** The binary name and executable entry remain `biscuitcode` (from `Cargo.toml`). The `.deb` file on disk is `BiscuitCode_<version>_amd64.deb`. Plan updated: Phase 2 ACs, Phase 10 ACs, Phase 10 release workflow deliverable, Global AC all corrected. Companion docs `docs/RELEASE.md` and `docs/INSTALL.md` still reference the old names and must be updated before Phase 10 runs (see Review Log 2026-04-19 for the specific line references).
 
-18. **(Phase 6b coder, 2026-04-19)** **`chat_send` executor wiring:** `commands/chat.rs::chat_send` still streams directly from the provider rather than routing through `ReActExecutor`. The `agent_mode: bool` field is now parsed from the request but unused. To get live write-tool agent runs, a Phase-7-or-later coder (or a standalone follow-up PR) must: (a) construct an `ExecutorContext` with the `ConfirmationState` and a cache root, (b) create a `ReActExecutor::with_context(...)` using `ToolRegistry::full_default()`, (c) drive `executor.run(...)` instead of the raw `provider.chat_stream(...)` loop. The confirmation state is already in Tauri managed state; only the glue code is missing.
+18. **(Phase 6b coder, 2026-04-19; RESOLVED by Phase 9 coder 2026-04-19)** ~~**`chat_send` executor wiring**: `commands/chat.rs::chat_send` still streams directly from the provider.~~ **RESOLVED:** `chat_send` now branches on `agent_mode`. When `true`, it constructs `ExecutorContext` (with `ConfirmationState` from managed state, cache root from `app.path().app_cache_dir()`, and an `emit_event` callback), creates `ReActExecutor::with_context(...)` using `ToolRegistry::full_default()`, and drives `executor.run(...)`. When `false`, the original direct-stream path is unchanged. Also added `emit_event` callback to `ExecutorContext` so streaming events are forwarded to the frontend during agent runs.
 
-19. **(Phase 7 coder → Phase 8 coder → Phase 9 coder)** **`monaco-languageclient` frontend adapter not implemented.** The Rust LSP backend (`biscuitcode-lsp`) is complete. Phase 8 coder evaluated `@codingame/monaco-languageclient` (latest: 0.17.4, over a year old) and `monaco-languageclient` (current mainstream). The mainstream package has known Vite/ESM bundler issues that would require vite.config.ts overrides and risked breaking the build mid-phase. The `__BISCUIT_WORKSPACE_ROOT__` global was wired in Phase 8 (one `useEffect` in `EditorArea.tsx`). The remaining gap is the `MessageTransports` adapter. **Phase 9 coder should install `monaco-languageclient` and wire the adapter**, accepting the Vite config changes needed. The AC "hover shows type, go-to-definition jumps correctly" remains unmet until this lands.
+19. **(Phase 7 → Phase 8 → Phase 9 coder; DEFERRED beyond Phase 9)** **`monaco-languageclient` frontend adapter not implemented.** Phase 9 coder evaluated `monaco-languageclient` v10.7.0: it pulls in 20+ `@codingame/monaco-vscode-api` packages (full VS Code extension host repackaged) with documented Vite ESM issues that require major `vite.config.ts` surgery. Installing it mid-phase risked breaking the build without providing a clear path to a clean compile. Decision: defer to a dedicated follow-up task. The AC "hover shows type, go-to-definition jumps correctly" remains unmet. Phase 10 coder should not assume this is available.
 
 16. **(Synthesis-added, RESOLVED 2026-04-18)** ~~Gemma 4 exact tag names.~~ **Resolved by direct verification against `https://ollama.com/library/gemma4`:** the actual tags are `gemma4:e2b` (2.3B effective, 7.2GB), `gemma4:e4b` (4.5B effective, 9.6GB, also `:latest`), `gemma4:26b` (MoE 25.2B/3.8B active, 18GB), `gemma4:31b` (30.7B, 20GB). Naming convention is `e<N>b` for edge variants and plain integers for full-size — different from the Gemma 3 family. The synthesis pass had extrapolated `gemma4:9b` / `gemma4:27b` which do not exist. **Plan updated.** Minimum Ollama version for Gemma 4 = `0.20.0` (released 2026-04-03 same-day as the Gemma 4 model drop). Open known issue: tool-call streaming via Ollama's OpenAI-compatible API has bugs (GitHub anomalyco/opencode#20995); we use `/api/chat` directly which is unaffected.

@@ -1,6 +1,7 @@
 // src/components/SettingsPage.tsx
 //
 // Phase 8 deliverable: full settings UI.
+// Phase 9: i18n all section labels; add update check to About section.
 //
 // Sections: General, Editor, Models, Terminal, Appearance, Security,
 //           Conversations, About.
@@ -11,6 +12,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { open as shellOpen } from '@tauri-apps/plugin-shell';
 import { THEMES, type ThemeId, applyTheme, previewTheme, getStoredThemeId } from '../theme/themes';
 
 // ---------------------------------------------------------------------------
@@ -75,15 +77,10 @@ export function saveSettings(s: BiscuitSettings): void {
 
 type Section = 'general' | 'editor' | 'models' | 'terminal' | 'appearance' | 'security' | 'conversations' | 'about';
 
-const SECTIONS: { id: Section; label: string }[] = [
-  { id: 'general',       label: 'General' },
-  { id: 'editor',        label: 'Editor' },
-  { id: 'models',        label: 'Models' },
-  { id: 'terminal',      label: 'Terminal' },
-  { id: 'appearance',    label: 'Appearance' },
-  { id: 'security',      label: 'Security' },
-  { id: 'conversations', label: 'Conversations' },
-  { id: 'about',         label: 'About' },
+// Section ids — labels resolved via t() at render time.
+const SECTION_IDS: Section[] = [
+  'general', 'editor', 'models', 'terminal',
+  'appearance', 'security', 'conversations', 'about',
 ];
 
 // ---------------------------------------------------------------------------
@@ -183,12 +180,13 @@ function GeneralSection({
   settings: BiscuitSettings;
   onChange: (s: BiscuitSettings) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
-      <SectionTitle>General</SectionTitle>
+      <SectionTitle>{t('settings.sections.general')}</SectionTitle>
       <SettingsToggle
-        label="Send anonymous crash reports"
-        description='Endpoint TBD; reports not yet sent.'
+        label={t('settings.general.telemetryLabel')}
+        description={t('settings.general.telemetryDescription')}
         value={settings.telemetry}
         onChange={(v) => onChange({ ...settings, telemetry: v })}
         data-testid="telemetry-toggle"
@@ -204,35 +202,36 @@ function EditorSection({
   settings: BiscuitSettings;
   onChange: (s: BiscuitSettings) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
-      <SectionTitle>Editor</SectionTitle>
+      <SectionTitle>{t('settings.sections.editor')}</SectionTitle>
       <SettingsNumber
-        label="Font size"
+        label={t('settings.editor.fontSize')}
         value={settings.fontSize}
         min={8}
         max={32}
         onChange={(v) => onChange({ ...settings, fontSize: v })}
       />
       <SettingsNumber
-        label="Tab size"
+        label={t('settings.editor.tabSize')}
         value={settings.tabSize}
         min={1}
         max={8}
         onChange={(v) => onChange({ ...settings, tabSize: v })}
       />
       <SettingsToggle
-        label="Word wrap"
+        label={t('settings.editor.wordWrap')}
         value={settings.wordWrap}
         onChange={(v) => onChange({ ...settings, wordWrap: v })}
       />
       <SettingsToggle
-        label="Minimap"
+        label={t('settings.editor.minimap')}
         value={settings.minimap}
         onChange={(v) => onChange({ ...settings, minimap: v })}
       />
       <SettingsToggle
-        label="Font ligatures"
+        label={t('settings.editor.ligatures')}
         value={settings.ligatures}
         onChange={(v) => onChange({ ...settings, ligatures: v })}
       />
@@ -283,7 +282,7 @@ function ModelsSection() {
 
   return (
     <>
-      <SectionTitle>Models & Providers</SectionTitle>
+      <SectionTitle>{t('settings.sections.models')}</SectionTitle>
       <div className="rounded border border-cocoa-500 bg-cocoa-800 p-4 flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-cocoa-100">Anthropic (Claude)</span>
@@ -363,18 +362,19 @@ function TerminalSection({
   settings: BiscuitSettings;
   onChange: (s: BiscuitSettings) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
-      <SectionTitle>Terminal</SectionTitle>
+      <SectionTitle>{t('settings.sections.terminal')}</SectionTitle>
       <SettingsNumber
-        label="Font size"
+        label={t('settings.terminal.fontSize')}
         value={settings.terminalFontSize}
         min={8}
         max={32}
         onChange={(v) => onChange({ ...settings, terminalFontSize: v })}
       />
       <SettingsNumber
-        label="Scrollback lines"
+        label={t('settings.terminal.scrollback')}
         value={settings.scrollback}
         min={100}
         max={100000}
@@ -391,6 +391,7 @@ function AppearanceSection({
   settings: BiscuitSettings;
   onChange: (s: BiscuitSettings) => void;
 }) {
+  const { t } = useTranslation();
   const currentTheme = getStoredThemeId();
 
   const handleSelect = (id: ThemeId) => {
@@ -409,7 +410,7 @@ function AppearanceSection({
 
   return (
     <>
-      <SectionTitle>Appearance</SectionTitle>
+      <SectionTitle>{t('settings.sections.appearance')}</SectionTitle>
       <div className="flex flex-col gap-2">
         {THEMES.map((theme) => (
           <button
@@ -450,12 +451,13 @@ function SecuritySection({
   settings: BiscuitSettings;
   onChange: (s: BiscuitSettings) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
-      <SectionTitle>Security</SectionTitle>
+      <SectionTitle>{t('settings.sections.security')}</SectionTitle>
       <SettingsToggle
-        label="Workspace trust"
-        description="When on, write and shell tools auto-approve for this workspace. Per-workspace, stored by path hash."
+        label={t('settings.security.workspaceTrustLabel')}
+        description={t('settings.security.workspaceTrustDescription')}
         value={settings.workspaceTrust}
         onChange={(v) => onChange({ ...settings, workspaceTrust: v })}
       />
@@ -476,11 +478,12 @@ function ConversationsSection({
   onImport: () => void;
   onCleanupNow: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
-      <SectionTitle>Conversations</SectionTitle>
+      <SectionTitle>{t('settings.sections.conversations')}</SectionTitle>
       <SettingsToggle
-        label="Automatic snapshot cleanup"
+        label={t('settings.conversations.snapshotCleanupLabel')}
         description={`Delete snapshots older than ${settings.snapshotMaxAgeDays} days from closed conversations.`}
         value={settings.snapshotCleanupEnabled}
         onChange={(v) => onChange({ ...settings, snapshotCleanupEnabled: v })}
@@ -500,44 +503,119 @@ function ConversationsSection({
           onClick={onExport}
           data-testid="export-conversations-btn"
         >
-          Export all conversations…
+          {t('settings.conversations.exportButton')}
         </button>
         <button
           className="px-4 py-2 bg-cocoa-700 hover:bg-cocoa-600 border border-cocoa-500 text-cocoa-200 rounded text-sm"
           onClick={onImport}
           data-testid="import-conversations-btn"
         >
-          Import conversations…
+          {t('settings.conversations.importButton')}
         </button>
         <button
           className="px-4 py-2 bg-cocoa-700 hover:bg-cocoa-600 border border-cocoa-500 text-cocoa-200 rounded text-sm"
           onClick={onCleanupNow}
           data-testid="cleanup-now-btn"
         >
-          Clean up snapshots now
+          {t('settings.conversations.cleanupNowButton')}
         </button>
       </div>
     </>
   );
 }
 
+interface UpdateInfoResult {
+  update_available: boolean;
+  latest_version: string | null;
+  release_url: string | null;
+  changelog_excerpt: string;
+}
+
 function AboutSection() {
+  const { t } = useTranslation();
+  const [checking, setChecking] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfoResult | null>(null);
+  const [checkError, setCheckError] = useState<string | null>(null);
+
+  const handleCheckForUpdates = async () => {
+    setChecking(true);
+    setUpdateInfo(null);
+    setCheckError(null);
+    try {
+      const info = await invoke<UpdateInfoResult>('check_for_deb_update');
+      setUpdateInfo(info);
+    } catch {
+      setCheckError(t('settings.about.updateCheckFailed'));
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (updateInfo?.release_url) {
+      try {
+        await shellOpen(updateInfo.release_url);
+      } catch {
+        // Fallback: nothing to do if shell open fails
+      }
+    }
+  };
+
   return (
     <>
-      <SectionTitle>About</SectionTitle>
+      <SectionTitle>{t('settings.sections.about')}</SectionTitle>
       <div className="text-sm text-cocoa-200 space-y-2">
         <div>
-          <span className="text-cocoa-400">Version</span>{' '}
+          <span className="text-cocoa-400">{t('settings.about.version')}</span>{' '}
           <span>0.1.0</span>
         </div>
         <div>
-          <span className="text-cocoa-400">License</span>{' '}
+          <span className="text-cocoa-400">{t('settings.about.license')}</span>{' '}
           <span>MIT</span>
         </div>
         <div>
-          <span className="text-cocoa-400">Repository</span>{' '}
+          <span className="text-cocoa-400">{t('settings.about.repository')}</span>{' '}
           <span className="text-biscuit-400">github.com/Coreyalanschmidt-creator/biscuitcode</span>
         </div>
+      </div>
+
+      <div className="mt-4 pt-4 border-t border-cocoa-600">
+        <button
+          className="px-4 py-2 bg-cocoa-700 hover:bg-cocoa-600 border border-cocoa-500 text-cocoa-200 rounded text-sm disabled:opacity-50"
+          onClick={handleCheckForUpdates}
+          disabled={checking}
+          data-testid="check-for-updates-btn"
+        >
+          {checking ? t('settings.about.checking') : t('settings.about.checkForUpdates')}
+        </button>
+
+        {checkError && (
+          <p className="mt-2 text-xs text-accent-error">{checkError}</p>
+        )}
+
+        {updateInfo && !updateInfo.update_available && (
+          <p className="mt-2 text-xs text-accent-ok">{t('settings.about.upToDate')}</p>
+        )}
+
+        {updateInfo?.update_available && (
+          <div className="mt-2 space-y-2">
+            <p className="text-xs text-biscuit-400">
+              {t('settings.about.updateAvailable', { version: updateInfo.latest_version ?? '' })}
+            </p>
+            {updateInfo.changelog_excerpt && (
+              <pre className="text-xs text-cocoa-300 bg-cocoa-800 rounded p-2 max-h-24 overflow-y-auto whitespace-pre-wrap">
+                {updateInfo.changelog_excerpt}
+              </pre>
+            )}
+            <button
+              className="px-4 py-2 bg-biscuit-500 hover:bg-biscuit-400 text-cocoa-900 font-semibold rounded text-sm"
+              onClick={handleDownload}
+              data-testid="download-deb-btn"
+            >
+              {t('settings.about.downloadDeb')}
+            </button>
+          </div>
+        )}
       </div>
     </>
   );
@@ -554,6 +632,7 @@ interface SettingsPageProps {
 }
 
 export function SettingsPage({ onExport, onImport, onCleanupNow }: SettingsPageProps = {}) {
+  const { t } = useTranslation();
   const [activeSection, setActiveSection] = useState<Section>('general');
   const [settings, setSettings] = useState<BiscuitSettings>(loadSettings);
 
@@ -586,18 +665,18 @@ export function SettingsPage({ onExport, onImport, onCleanupNow }: SettingsPageP
         className="w-40 flex-shrink-0 bg-cocoa-800 border-r border-cocoa-600 py-2 overflow-y-auto"
         aria-label="Settings sections"
       >
-        {SECTIONS.map((s) => (
+        {SECTION_IDS.map((id) => (
           <button
-            key={s.id}
+            key={id}
             className={`w-full text-left px-3 py-2 text-xs transition-colors ${
-              activeSection === s.id
+              activeSection === id
                 ? 'bg-cocoa-700 text-cocoa-50 border-l-2 border-biscuit-500'
                 : 'text-cocoa-300 hover:bg-cocoa-700 hover:text-cocoa-100 border-l-2 border-transparent'
             }`}
-            onClick={() => setActiveSection(s.id)}
-            data-testid={`settings-section-${s.id}`}
+            onClick={() => setActiveSection(id)}
+            data-testid={`settings-section-${id}`}
           >
-            {s.label}
+            {t(`settings.sections.${id}`)}
           </button>
         ))}
       </nav>

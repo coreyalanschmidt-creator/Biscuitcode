@@ -33,6 +33,8 @@ tauri-plugin-shell = "2"
 tauri-plugin-os = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-process = "2"
+# Phase 9 — AppImage auto-update via Tauri updater.
+tauri-plugin-updater = "2"
 
 # Phase 1 — shared primitives.
 biscuitcode-core = { path = "biscuitcode-core" }
@@ -48,6 +50,9 @@ biscuitcode-lsp = { path = "biscuitcode-lsp" }
 
 # Phase 5 — futures for streaming Tauri events
 futures = "0.3"
+
+# Phase 9 — HTTP client for the .deb update check (GitHub Releases API).
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 
 # Async + serde
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }

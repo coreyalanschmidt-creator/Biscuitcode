@@ -41,6 +41,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        // Phase 9 — auto-update (AppImage path).
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // ----------------------------------------
         .manage(WorkspaceState(Mutex::new(None)))
         .manage(Arc::new(PtyRegistry::new()))
@@ -108,6 +110,10 @@ pub fn run() {
             commands::conversations::snapshots_cleanup_now,
             commands::conversations::fork_message,
             commands::conversations::list_message_branches,
+            // Phase 9 — auto-update
+            commands::update::check_for_deb_update,
+            commands::update::check_for_appimage_update,
+            commands::update::install_appimage_update,
         ])
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();

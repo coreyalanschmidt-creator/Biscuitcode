@@ -91,6 +91,27 @@ export interface E003_PtyOpenFailed extends BaseErrorPayload {
   recovery: { kind: 'dismiss_only' };
 }
 
+// Phase 5 — E004–E006.
+export interface E004_AnthropicAuthInvalid extends BaseErrorPayload {
+  code: 'E004';
+  messageKey: 'errors.E004.msg';
+  recovery: { kind: 'deeplink_settings'; section: 'models' };
+}
+
+export interface E005_AnthropicNetworkError extends BaseErrorPayload {
+  code: 'E005';
+  messageKey: 'errors.E005.msg';
+  interpolations?: Record<string, string | number>;
+  recovery: { kind: 'retry' };
+}
+
+export interface E006_AnthropicRateLimited extends BaseErrorPayload {
+  code: 'E006';
+  messageKey: 'errors.E006.msg';
+  interpolations: { retry_after_seconds: number };
+  recovery: { kind: 'retry' };
+}
+
 // Phase 6b — E008–E011.
 export interface E008_WriteToolDenied extends BaseErrorPayload {
   code: 'E008';
@@ -120,17 +141,76 @@ export interface E011_RewindFailed extends BaseErrorPayload {
   recovery: { kind: 'dismiss_only' };
 }
 
+// Phase 7 — E012–E015.
+export interface E012_GitPushFailed extends BaseErrorPayload {
+  code: 'E012';
+  messageKey: 'errors.E012.msg';
+  interpolations: { git_stderr: string };
+  recovery: { kind: 'dismiss_only' };
+}
+
+export interface E013_LspServerMissing extends BaseErrorPayload {
+  code: 'E013';
+  messageKey: 'errors.E013.msg';
+  interpolations: { language: string; install_command: string };
+  recovery: { kind: 'copy_command'; command: string };
+}
+
+export interface E014_LspProtocolError extends BaseErrorPayload {
+  code: 'E014';
+  messageKey: 'errors.E014.msg';
+  interpolations: { language: string };
+  recovery: { kind: 'dismiss_only' };
+}
+
+export interface E015_PreviewRenderFailed extends BaseErrorPayload {
+  code: 'E015';
+  messageKey: 'errors.E015.msg';
+  interpolations: { file: string; reason: string };
+  recovery: { kind: 'dismiss_only' };
+}
+
+// Phase 8 — E016.
+export interface E016_FontLoadFailed extends BaseErrorPayload {
+  code: 'E016';
+  messageKey: 'errors.E016.msg';
+  recovery: { kind: 'dismiss_only' };
+}
+
+// Phase 9 — E017–E018.
+export interface E017_UpdateCheckFailed extends BaseErrorPayload {
+  code: 'E017';
+  messageKey: 'errors.E017.msg';
+  recovery: { kind: 'retry' };
+}
+
+export interface E018_UpdateDownloadFailed extends BaseErrorPayload {
+  code: 'E018';
+  messageKey: 'errors.E018.msg';
+  interpolations: { reason: string };
+  recovery: { kind: 'open_url'; url: string; label?: string };
+}
+
 /** The discriminated union the toast accepts. */
 export type AppErrorPayload =
   | E001_KeyringMissing
   | E002_OutsideWorkspace
   | E003_PtyOpenFailed
+  | E004_AnthropicAuthInvalid
+  | E005_AnthropicNetworkError
+  | E006_AnthropicRateLimited
   | E007_GemmaVersionFallback
   | E008_WriteToolDenied
   | E009_ShellForbiddenPrefix
   | E010_SnapshotFailed
-  | E011_RewindFailed;
-// Add more here as phases register their codes.
+  | E011_RewindFailed
+  | E012_GitPushFailed
+  | E013_LspServerMissing
+  | E014_LspProtocolError
+  | E015_PreviewRenderFailed
+  | E016_FontLoadFailed
+  | E017_UpdateCheckFailed
+  | E018_UpdateDownloadFailed;
 
 /** Type guard: is this a known catalogued error? */
 export function isAppError(x: unknown): x is AppErrorPayload {

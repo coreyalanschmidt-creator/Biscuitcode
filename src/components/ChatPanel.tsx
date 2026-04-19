@@ -747,7 +747,7 @@ export function ChatPanel() {
       {noKeyBanner}
 
       {/* Message list */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden" role="log" aria-live="polite" aria-label={t('panels.chatPanel')}>
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-xs text-cocoa-400 px-4 text-center">
             {t('chat.emptyHint')}

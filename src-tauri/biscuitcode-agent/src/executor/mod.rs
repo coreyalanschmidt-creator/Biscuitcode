@@ -85,6 +85,10 @@ pub struct ExecutorContext {
     /// Receives the serialized `ConfirmationRequest` JSON.
     /// Returns `Ok(())` if the event was emitted; `Err` if the window is gone.
     pub emit_confirm: Arc<dyn Fn(ConfirmationRequest) -> Result<(), String> + Send + Sync>,
+    /// Optional callback invoked for every `ChatEvent` emitted while streaming.
+    /// Allows the Tauri command handler to forward stream events to the frontend.
+    /// `None` means events are not forwarded (used in tests).
+    pub emit_event: Option<Arc<dyn Fn(&ChatEvent) + Send + Sync>>,
 }
 
 pub struct ReActExecutor {
@@ -133,6 +137,8 @@ impl ReActExecutor {
         opts: ChatOptions,
         agent_mode: bool,
     ) -> Result<RunOutcome, ExecutorError> {
+        let emit_event = self.ctx.as_ref().and_then(|c| c.emit_event.clone());
+
         loop {
             // 1. Pause check at iteration boundary.
             if self.pause.load(Ordering::SeqCst) {
@@ -145,7 +151,7 @@ impl ReActExecutor {
                 .chat_stream(messages.clone(), tools, opts.clone())
                 .await?;
 
-            let assistant_msg = self.consume_stream(&mut stream).await?;
+            let assistant_msg = self.consume_stream(&mut stream, emit_event.as_deref()).await?;
             messages.push(assistant_msg.clone());
 
             // 3. No tool calls -> we're done.
@@ -180,6 +186,7 @@ impl ReActExecutor {
         stream: &mut std::pin::Pin<
             Box<dyn futures::Stream<Item = Result<ChatEvent, ProviderError>> + Send>,
         >,
+        emit_event: Option<&(dyn Fn(&ChatEvent) + Send + Sync)>,
     ) -> Result<Message, ExecutorError> {
         use futures::StreamExt;
 
@@ -199,7 +206,14 @@ impl ReActExecutor {
                 last_pause_check = Instant::now();
             }
 
-            match ev? {
+            let event = ev?;
+
+            // Forward event to the Tauri command handler for frontend streaming.
+            if let Some(cb) = emit_event {
+                cb(&event);
+            }
+
+            match event {
                 ChatEvent::TextDelta { text: t } => text.push_str(&t),
                 ChatEvent::ThinkingDelta { .. } => { /* persist separately */ }
                 ChatEvent::ToolCallStart { id, name } => {

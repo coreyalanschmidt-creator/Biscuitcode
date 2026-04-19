@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "updater",
+  "description": "Phase 9 — Tauri updater plugin capability for AppImage auto-update. The updater checks the static manifest at GitHub Releases and downloads/installs AppImage updates only.",
+  "windows": ["main"],
+  "permissions": [
+    "updater:default"
+  ]
+}

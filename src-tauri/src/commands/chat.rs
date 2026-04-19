@@ -6,12 +6,16 @@
 //! **Key invariant:** API keys are never echoed back to the frontend.
 //! The `get_anthropic_key` command returns only a boolean (present/absent).
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use biscuitcode_agent::{
+    executor::{confirmation::PendingConfirmations, ExecutorContext},
+    ReActExecutor,
+};
 use biscuitcode_core::secrets;
 use biscuitcode_db::{ConversationId, Database, MessageId, WorkspaceId};
 use biscuitcode_providers::{
@@ -227,6 +231,9 @@ pub struct ChatSendRequest {
 /// over the Tauri event channel `biscuitcode:chat-event:<conversation_id>`.
 /// When the stream ends (`Done`), persists the assistant message.
 ///
+/// When `agent_mode` is true, the request is routed through `ReActExecutor`
+/// so write tools, the confirmation gate, and snapshot/rewind all function.
+///
 /// Frontend listens with:
 /// ```ts
 /// await listen(`biscuitcode:chat-event:${convId}`, (e) => handleEvent(e.payload));
@@ -277,6 +284,7 @@ pub async fn chat_send(
     let provider = AnthropicProvider::new(api_key);
 
     // Build messages for the provider (load from DB so history is included).
+    // DB lock released before entering any async streaming work (PM-02: deadlock avoidance).
     let messages = {
         let guard = state.0.lock().map_err(|_| "db lock poisoned")?;
         let db = guard.as_ref().ok_or("db not initialised")?;
@@ -291,6 +299,7 @@ pub async fn chat_send(
             })
             .collect::<Vec<_>>()
     };
+    // DB lock is now released — no lock held below.
 
     let opts = ChatOptions {
         model: req.model.clone(),
@@ -301,63 +310,189 @@ pub async fn chat_send(
 
     let event_channel = format!("biscuitcode:chat-event:{}", req.conversation_id);
 
-    // Start the stream.
-    let mut stream = provider
-        .chat_stream(messages, vec![], opts)
-        .await
-        .map_err(|e| e.to_string())?;
+    if req.agent_mode {
+        // --- Agent mode: route through ReActExecutor ---
+        //
+        // Retrieves confirmation state from managed Tauri state, constructs
+        // ExecutorContext, and drives the ReAct loop. Events are forwarded
+        // to the frontend via the emit_event callback.
 
-    // Collect assistant content so we can persist at stream end.
-    let mut assistant_text = String::new();
-    let mut final_usage: Option<Usage> = None;
+        let pending: Arc<PendingConfirmations> = {
+            use super::agent::ConfirmationState;
+            app.state::<ConfirmationState>().0.clone()
+        };
 
-    while let Some(item) = stream.next().await {
-        let event = match item {
-            Ok(e) => e,
-            Err(e) => {
-                let _ = app.emit(
-                    &event_channel,
-                    ChatEventPayload::from_err(e.to_string()),
-                );
-                break;
+        // Workspace root from WorkspaceState (None → use process cwd as fallback).
+        let workspace_root = {
+            use super::fs::WorkspaceState;
+            let ws = app.state::<WorkspaceState>();
+            let guard = ws.0.lock().map_err(|_| "workspace lock poisoned")?;
+            match guard.as_deref() {
+                Some(p) => std::path::PathBuf::from(p),
+                None => std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/")),
             }
         };
 
-        // Accumulate text for persistence.
-        if let ChatEvent::TextDelta { ref text } = event {
-            assistant_text.push_str(text);
-        }
-        if let ChatEvent::Done { ref usage, .. } = event {
-            final_usage = Some(*usage);
-        }
+        // Cache root for snapshots: ~/.cache/biscuitcode/
+        let cache_root = app
+            .path()
+            .app_cache_dir()
+            .map_err(|e| e.to_string())?;
 
-        let _ = app.emit(&event_channel, ChatEventPayload::from_event(&event));
+        // Workspace trust from settings (best-effort read from localStorage-like value;
+        // for now, default to false — the confirmation gate handles all write/shell tools).
+        let workspace_trusted = false;
 
-        // On Done, persist the assistant message and break.
-        if matches!(event, ChatEvent::Done { .. }) {
-            let content = if assistant_text.is_empty() {
-                vec![]
-            } else {
-                vec![ContentBlock::Text { text: assistant_text.clone() }]
-            };
-            let mut guard = state.0.lock().map_err(|_| "db lock poisoned")?;
-            if let Some(db) = guard.as_mut() {
-                let _ = db.append_message(
-                    &conv_id,
-                    Some(&user_msg_id),
-                    MessageRole::Assistant,
-                    &req.model,
-                    &content,
-                    &[],
-                    &[],
-                    final_usage.as_ref(),
-                );
+        let app_clone = app.clone();
+        let event_channel_clone = event_channel.clone();
+
+        let emit_confirm: Arc<dyn Fn(biscuitcode_agent::executor::confirmation::ConfirmationRequest) -> Result<(), String> + Send + Sync> = {
+            let app2 = app.clone();
+            Arc::new(move |req| {
+                app2.emit("biscuitcode:confirm-request", &req)
+                    .map_err(|e| e.to_string())
+            })
+        };
+
+        let emit_event: Arc<dyn Fn(&ChatEvent) + Send + Sync> = Arc::new(move |ev| {
+            let _ = app_clone.emit(&event_channel_clone, ChatEventPayload::from_event(ev));
+        });
+
+        let exec_ctx = Arc::new(ExecutorContext {
+            cache_root,
+            pending,
+            workspace_trusted,
+            emit_confirm,
+            emit_event: Some(emit_event),
+        });
+
+        let registry = Arc::new(biscuitcode_agent::tools::ToolRegistry::full_default());
+        let executor = ReActExecutor::new(registry, workspace_root, conv_id.clone())
+            .with_context(exec_ctx);
+
+        let original_msg_count = messages.len();
+        let provider_arc: Arc<dyn ModelProvider> = Arc::new(provider);
+        let outcome = executor
+            .run(provider_arc, messages, opts, true)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // Emit a synthetic Done event so the frontend knows the run ended.
+        let done_payload = ChatEventPayload {
+            event_type: "done".into(),
+            stop_reason: Some("end_turn".into()),
+            usage: Some(UsageDto {
+                input_tokens: 0,
+                output_tokens: 0,
+                cache_read_input_tokens: None,
+                cache_creation_input_tokens: None,
+            }),
+            ..ChatEventPayload::empty()
+        };
+        let _ = app.emit(&event_channel, done_payload);
+
+        // Persist the final assistant messages from the outcome.
+        let final_messages = match outcome {
+            biscuitcode_agent::RunOutcome::Done { messages } => messages,
+            biscuitcode_agent::RunOutcome::Paused { messages } => messages,
+            biscuitcode_agent::RunOutcome::ToolsAvailable { messages } => messages,
+        };
+
+        // Persist assistant turn(s) that the executor produced.
+        let mut guard = state.0.lock().map_err(|_| "db lock poisoned")?;
+        if let Some(db) = guard.as_mut() {
+            let mut parent = Some(user_msg_id);
+            for msg in final_messages.iter().skip(original_msg_count) {
+                if msg.role == Role::Assistant {
+                    let text = extract_text_from_content(&msg.content);
+                    let content_blocks: Vec<ContentBlock> = if text.is_empty() {
+                        vec![]
+                    } else {
+                        vec![ContentBlock::Text { text }]
+                    };
+                    if let Ok(stored) = db.append_message(
+                        &conv_id,
+                        parent.as_ref(),
+                        MessageRole::Assistant,
+                        &req.model,
+                        &content_blocks,
+                        &msg.tool_calls,
+                        &msg.tool_results,
+                        None,
+                    ) {
+                        parent = Some(stored.message_id);
+                    }
+                }
             }
-            break;
+        }
+    } else {
+        // --- Plain streaming mode (no agent tools) ---
+        let mut stream = provider
+            .chat_stream(messages, vec![], opts)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let mut assistant_text = String::new();
+        let mut final_usage: Option<Usage> = None;
+
+        while let Some(item) = stream.next().await {
+            let event = match item {
+                Ok(e) => e,
+                Err(e) => {
+                    let _ = app.emit(
+                        &event_channel,
+                        ChatEventPayload::from_err(e.to_string()),
+                    );
+                    break;
+                }
+            };
+
+            if let ChatEvent::TextDelta { ref text } = event {
+                assistant_text.push_str(text);
+            }
+            if let ChatEvent::Done { ref usage, .. } = event {
+                final_usage = Some(*usage);
+            }
+
+            let _ = app.emit(&event_channel, ChatEventPayload::from_event(&event));
+
+            if matches!(event, ChatEvent::Done { .. }) {
+                let content = if assistant_text.is_empty() {
+                    vec![]
+                } else {
+                    vec![ContentBlock::Text { text: assistant_text.clone() }]
+                };
+                let mut guard = state.0.lock().map_err(|_| "db lock poisoned")?;
+                if let Some(db) = guard.as_mut() {
+                    let _ = db.append_message(
+                        &conv_id,
+                        Some(&user_msg_id),
+                        MessageRole::Assistant,
+                        &req.model,
+                        &content,
+                        &[],
+                        &[],
+                        final_usage.as_ref(),
+                    );
+                }
+                break;
+            }
         }
     }
 
     Ok(())
+}
+
+/// Helper: extract plain text from a ContentBlock slice.
+fn extract_text_from_content(content: &[ContentBlock]) -> String {
+    content
+        .iter()
+        .filter_map(|b| match b {
+            ContentBlock::Text { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("")
 }
 
 /// Serializable payload for the `biscuitcode:chat-event:<id>` Tauri event.

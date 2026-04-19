@@ -126,21 +126,6 @@
       "msg": "Couldn't download the update: {{reason}}. Try again later or download manually from the releases page."
     }
   },
-  "settings": {
-    "providers": {
-      "title": "Models & Providers",
-      "statusActive": "Active",
-      "statusUntested": "Untested",
-      "statusNoKey": "No key",
-      "addKey": "Add key",
-      "addKeyLabel": "Add API key for {{name}}",
-      "removeKey": "Remove key",
-      "deleteKey": "Remove API key for {{name}}",
-      "saveFailed": "Failed to save key.",
-      "anthropicKeyLabel": "Anthropic API key",
-      "landsInPhase": "Lands in Phase {{phase}}"
-    }
-  },
   "chat": {
     "you": "You",
     "assistant": "Assistant",
@@ -256,6 +241,68 @@
     "noTerminals": "No terminals open",
     "noProblems": "No LSP diagnostics",
     "noGitDiff": "No git changes"
+  },
+  "settings": {
+    "sections": {
+      "general": "General",
+      "editor": "Editor",
+      "models": "Models & Providers",
+      "terminal": "Terminal",
+      "appearance": "Appearance",
+      "security": "Security",
+      "conversations": "Conversations",
+      "about": "About"
+    },
+    "general": {
+      "telemetryLabel": "Send anonymous crash reports",
+      "telemetryDescription": "Endpoint TBD; reports not yet sent."
+    },
+    "editor": {
+      "fontSize": "Font size",
+      "tabSize": "Tab size",
+      "wordWrap": "Word wrap",
+      "minimap": "Minimap",
+      "ligatures": "Font ligatures"
+    },
+    "terminal": {
+      "fontSize": "Font size",
+      "scrollback": "Scrollback lines"
+    },
+    "security": {
+      "workspaceTrustLabel": "Workspace trust",
+      "workspaceTrustDescription": "When on, write and shell tools auto-approve for this workspace. Per-workspace, stored by path hash."
+    },
+    "conversations": {
+      "snapshotCleanupLabel": "Automatic snapshot cleanup",
+      "exportButton": "Export all conversations\u2026",
+      "importButton": "Import conversations\u2026",
+      "cleanupNowButton": "Clean up snapshots now"
+    },
+    "about": {
+      "version": "Version",
+      "license": "License",
+      "repository": "Repository",
+      "checkForUpdates": "Check for updates",
+      "checking": "Checking\u2026",
+      "upToDate": "You\u2019re up to date.",
+      "updateAvailable": "Version {{version}} is available.",
+      "downloadDeb": "Download .deb",
+      "updateCheckFailed": "Couldn\u2019t check for updates.",
+      "downloadAndInstall": "Download & install"
+    },
+    "providers": {
+      "title": "Models & Providers",
+      "statusActive": "Active",
+      "statusUntested": "Untested",
+      "statusNoKey": "No key",
+      "addKey": "Add key",
+      "addKeyLabel": "Add API key for {{name}}",
+      "removeKey": "Remove key",
+      "deleteKey": "Remove API key for {{name}}",
+      "saveFailed": "Failed to save key.",
+      "anthropicKeyLabel": "Anthropic API key",
+      "landsInPhase": "Lands in Phase {{phase}}"
+    }
   },
   "onboarding": {
     "welcome": {
