@@ -1,0 +1,48 @@
+# biscuitcode-providers — ModelProvider trait + per-provider impls.
+#
+# Phase 5 deliverable (created here as a skeleton; the trait + types land
+# in Phase 5 alongside the Anthropic impl. Phase 6a adds OpenAI + Ollama).
+#
+# Design contract: docs/design/PROVIDER-TRAIT.md.
+
+[package]
+name = "biscuitcode-providers"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Streaming chat providers (Anthropic, OpenAI, Ollama) behind a unified trait."
+publish = false
+
+[dependencies]
+biscuitcode-core = { path = "../biscuitcode-core" }
+
+# Async + streams
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+futures = "0.3"
+
+# HTTP client. rustls-tls keeps us off OpenSSL for the .deb (smaller deps,
+# no system-ssl version coupling). HTTP/2 + keep-alive on by default.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream", "http2"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Errors
+thiserror = "1.0"
+
+# SSE parsing for Anthropic + OpenAI Chat Completions
+eventsource-stream = "0.2"
+
+# Logging — Phase 5 turns this on; Phase 1 left it minimal.
+tracing = "0.1"
+
+[lib]
+name = "biscuitcode_providers"
+path = "src/lib.rs"
+
+[dev-dependencies]
+# Mock HTTP server for unit tests against the SSE/NDJSON parsers.
+wiremock = "0.6"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "test-util"] }

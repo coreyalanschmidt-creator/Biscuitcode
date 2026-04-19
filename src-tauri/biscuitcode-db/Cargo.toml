@@ -1,0 +1,47 @@
+# biscuitcode-db — SQLite persistence for conversations.
+#
+# Phase 5 deliverable. rusqlite direct (no plugin-sql), WAL mode,
+# PRAGMA user_version migrations. DAG message schema with parent_id
+# for branching.
+#
+# Design contract: docs/design/AGENT-LOOP.md § Conversation persistence
+# and docs/CONVERSATION-EXPORT-SCHEMA.md.
+
+[package]
+name = "biscuitcode-db"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "SQLite persistence (rusqlite + hand-rolled migrations) for BiscuitCode conversations."
+publish = false
+
+[dependencies]
+biscuitcode-core = { path = "../biscuitcode-core" }
+biscuitcode-providers = { path = "../biscuitcode-providers" }
+
+# rusqlite. bundled feature compiles SQLite from source so we don't depend
+# on the Linux distribution's sqlite version. Adds ~1.5MB to the .deb but
+# eliminates a class of "works on my Mint, not on yours" bugs.
+rusqlite = { version = "0.32", features = ["bundled", "chrono", "serde_json"] }
+
+# ULID for conversation/message IDs (sortable, time-prefixed, no central
+# coordinator). Mirrors the IDs used in CONVERSATION-EXPORT-SCHEMA.md.
+ulid = { version = "1", features = ["serde"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Errors
+thiserror = "1.0"
+
+# Serialization (we serde-encode ContentBlock vectors into the messages
+# table's content_json column).
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+tracing = "0.1"
+
+[lib]
+name = "biscuitcode_db"
+path = "src/lib.rs"
