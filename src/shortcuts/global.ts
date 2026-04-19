@@ -54,7 +54,7 @@ export const SHORTCUTS: Readonly<Record<string, ShortcutSpec>> = Object.freeze({
   'Ctrl+P': {
     label: 'Ctrl+P',
     phase: 3,
-    handler: placeholder('Ctrl+P quick-open', 3),
+    handler: () => window.dispatchEvent(new CustomEvent('biscuitcode:editor-quick-open')),
   },
   'Ctrl+Shift+P': {
     label: 'Ctrl+Shift+P',
@@ -69,7 +69,7 @@ export const SHORTCUTS: Readonly<Record<string, ShortcutSpec>> = Object.freeze({
   'Ctrl+\\': {
     label: 'Ctrl+\\',
     phase: 3,
-    handler: placeholder('Ctrl+\\ split editor', 3),
+    handler: () => window.dispatchEvent(new CustomEvent('biscuitcode:editor-split')),
   },
   'Ctrl+K Ctrl+I': {
     label: 'Ctrl+K Ctrl+I',

@@ -150,7 +150,7 @@ fn get_workspace_root(state: &State<WorkspaceState>) -> Result<PathBuf, FsError>
 ///
 /// Returns the canonical path string so the frontend can display it.
 #[tauri::command]
-pub async fn fs_open_folder(
+pub fn fs_open_folder(
     app: tauri::AppHandle,
     state: State<'_, WorkspaceState>,
 ) -> FsResult<String> {
@@ -159,14 +159,13 @@ pub async fn fs_open_folder(
     let folder = app
         .dialog()
         .file()
-        .pick_folder()
-        .await
+        .blocking_pick_folder()
         .ok_or_else(|| FsError {
             code: "E000",
             message: "No folder selected.".to_string(),
         })?;
 
-    let path = folder.path().map_err(|e| FsError {
+    let path = folder.into_path().map_err(|e| FsError {
         code: "E000",
         message: e.to_string(),
     })?;

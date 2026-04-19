@@ -110,11 +110,28 @@ describe('shortcut handler dispatch', () => {
     expect(paletteEvents.length).toBe(1);
   });
 
+  // Phase 3 real-action shortcuts that dispatch custom events (not toasts).
+  it('Ctrl+P fires the editor-quick-open event', () => {
+    const events: Event[] = [];
+    const listener = (e: Event) => events.push(e);
+    window.addEventListener('biscuitcode:editor-quick-open', listener);
+    SHORTCUTS['Ctrl+P'].handler(new KeyboardEvent('keydown'));
+    window.removeEventListener('biscuitcode:editor-quick-open', listener);
+    expect(events.length).toBe(1);
+  });
+
+  it('Ctrl+\\ fires the editor-split event', () => {
+    const events: Event[] = [];
+    const listener = (e: Event) => events.push(e);
+    window.addEventListener('biscuitcode:editor-split', listener);
+    SHORTCUTS['Ctrl+\\'].handler(new KeyboardEvent('keydown'));
+    window.removeEventListener('biscuitcode:editor-split', listener);
+    expect(events.length).toBe(1);
+  });
+
   // Placeholder shortcuts — must fire biscuitcode:toast (not silently no-op).
   const placeholderCombos = [
-    'Ctrl+P',
     'Ctrl+`',
-    'Ctrl+\\',
     'Ctrl+K Ctrl+I',
     'Ctrl+L',
     'Ctrl+Shift+L',

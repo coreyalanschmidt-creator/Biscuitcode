@@ -37,7 +37,44 @@
     "terminal": "Terminal",
     "agentActivity": "Agent Activity",
     "problems": "Problems",
-    "output": "Output"
+    "output": "Output",
+    "comingSoon": "content lands in a later phase."
+  },
+
+  "editor": {
+    "area": "Editor area",
+    "tabList": "Open files",
+    "dirtyIndicator": "Unsaved changes",
+    "closeTab": "Close {{name}}",
+    "noFileOpen": "No file open",
+    "loading": "Loading\u2026",
+    "welcomeHint": "Open a folder to start coding.",
+    "quickOpen": "Quick open file",
+    "quickOpenPlaceholder": "Type a filename\u2026",
+    "noResults": "No matching files"
+  },
+
+  "fileTree": {
+    "aria": "File explorer",
+    "noFolder": "No folder open.",
+    "openFolder": "Open Folder\u2026",
+    "changeFolder": "Change folder",
+    "contextMenu": "File actions",
+    "newFile": "New File",
+    "newFolder": "New Folder",
+    "rename": "Rename",
+    "delete": "Delete",
+    "copyPath": "Copy Path",
+    "openInTerminal": "Open in Terminal",
+    "revealInFileManager": "Reveal in File Manager"
+  },
+
+  "search": {
+    "placeholder": "Search in files\u2026",
+    "regex": "Regex",
+    "caseSensitive": "Case sensitive",
+    "searching": "Searching\u2026",
+    "noResults": "No results found."
   },
 
   "errors": {
