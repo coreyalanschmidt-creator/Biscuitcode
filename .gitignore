@@ -1,0 +1,50 @@
+# Tauri / Rust
+target/
+**/target/
+*.rs.bk
+Cargo.lock.bak
+
+# Node / pnpm / Vite
+node_modules/
+.pnpm-store/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Tauri-specific build outputs
+src-tauri/gen/
+src-tauri/target/
+src-tauri/Cargo.lock
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Local config / secrets (paranoia — keys SHOULD live in the keyring, not on disk,
+# but block accidental commits of any local override files just in case)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Test/coverage artifacts
+coverage/
+.nyc_output/
+*.lcov
+
+# BiscuitCode app-local caches (never end up in the repo)
+.biscuitcode-cache/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS-generated junk
+*.orig
+*.rej
