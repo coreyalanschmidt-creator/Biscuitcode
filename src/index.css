@@ -1,0 +1,99 @@
+/* src/index.css
+ *
+ * Phase 1 deliverable. Wires Tailwind + the brand-token CSS custom
+ * properties + the @font-face rules. Imported once from src/main.tsx.
+ *
+ * Brand tokens duplicated here as CSS custom properties so non-Tailwind
+ * consumers (Monaco theme override, xterm.js color overrides, lucide
+ * icons via stroke="currentColor") can reach them via `var(--biscuit-500)`.
+ *
+ * Source of truth for the values: src/theme/tokens.ts and
+ * src-tauri/biscuitcode-core/src/palette.rs (mirror).
+ */
+
+@import './theme/fonts.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Biscuit (warm gold) */
+  --biscuit-50:  #FDF7E6;
+  --biscuit-100: #FAE8B3;
+  --biscuit-200: #F5D380;
+  --biscuit-300: #F0C065;
+  --biscuit-400: #EBB553;
+  --biscuit-500: #E8B04C; /* PRIMARY ACCENT */
+  --biscuit-600: #C7913A;
+  --biscuit-700: #9E722A;
+  --biscuit-800: #74531E;
+  --biscuit-900: #4A3413;
+
+  /* Cocoa (warm dark) */
+  --cocoa-50:  #F6F0E8;
+  --cocoa-100: #E0D3BE;
+  --cocoa-200: #B9A582;
+  --cocoa-300: #8A7658;
+  --cocoa-400: #584938;
+  --cocoa-500: #3A2F24; /* dividers */
+  --cocoa-600: #28201A;
+  --cocoa-700: #1C1610; /* PRIMARY DARK BG */
+  --cocoa-800: #120D08;
+  --cocoa-900: #080504; /* DEEPEST DARK */
+
+  /* Semantic */
+  --accent-ok:    #6FBF6E;
+  --accent-warn:  #E8833E;
+  --accent-error: #E06B5B;
+
+  /* Aliases */
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  /* Default — overridden per-region by Tailwind classes on components. */
+  background: var(--cocoa-700);
+  color: var(--cocoa-50);
+  font-family: 'Inter', 'Ubuntu', sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+
+  /* Disable text selection by default in chrome; opt-in per-region. */
+  user-select: none;
+}
+
+/* Editor / chat / terminal regions allow text selection. */
+[data-text-selectable] {
+  user-select: text;
+}
+
+/* Visible focus ring across the app — Phase 9 a11y posture. */
+:focus-visible {
+  outline: 2px solid var(--biscuit-500);
+  outline-offset: 2px;
+}
+
+/* Scrollbar styling — keep the cocoa palette consistent. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--cocoa-800);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--cocoa-500);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--cocoa-400);
+}

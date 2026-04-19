@@ -17,6 +17,7 @@
 
 pub mod errors;
 pub mod palette;
+pub mod secrets;
 
 pub use errors::CatalogueError;
 pub use palette::Rgb;
