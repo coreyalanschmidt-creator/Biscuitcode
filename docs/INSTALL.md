@@ -11,15 +11,15 @@ The `.deb` is the cleanest install — it integrates with apt/dpkg, registers a 
 ### From the GitHub release page
 
 1. Visit `https://github.com/Coreyalanschmidt-creator/biscuitcode/releases/latest`
-2. Download `biscuitcode_<version>_amd64.deb` and `biscuitcode_<version>_amd64.deb.asc`.
+2. Download `BiscuitCode_<version>_amd64.deb` and `BiscuitCode_<version>_amd64.deb.asc`.
 3. (Optional but recommended) Verify the GPG signature:
    ```bash
-   gpg --verify biscuitcode_<version>_amd64.deb.asc biscuitcode_<version>_amd64.deb
+   gpg --verify BiscuitCode_<version>_amd64.deb.asc BiscuitCode_<version>_amd64.deb
    ```
    Should report "Good signature" against the BiscuitCode release key.
 4. Install via GDebi (double-click in Files manager) OR via terminal:
    ```bash
-   sudo dpkg -i biscuitcode_<version>_amd64.deb
+   sudo dpkg -i BiscuitCode_<version>_amd64.deb
    sudo apt -f install   # picks up any missing dependencies
    ```
 5. Launch from Whisker menu → Development → BiscuitCode.
@@ -37,7 +37,7 @@ The `.deb` is the cleanest install — it integrates with apt/dpkg, registers a 
 ### Uninstall
 
 ```bash
-sudo apt remove biscuitcode
+sudo apt remove biscuit-code
 ```
 
 This removes the binary, `.desktop` entry, icons, and the `/usr/bin/biscuitcode` symlink. **Your settings, conversations, and snapshots are preserved** at:

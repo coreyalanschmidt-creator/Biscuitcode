@@ -7,10 +7,6 @@
 #
 # Phase 10 deliverable: this file is fully populated with all the gates
 # required to merge a release-candidate PR.
-#
-# Until each job's tests exist, jobs may be near-empty (--passWithNoTests / --
-# || true) — but the workflow MUST run on every PR from Phase 1 forward so we
-# catch CI-config regressions early instead of during release crunch.
 
 name: CI
 
@@ -84,15 +80,15 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: pnpm lint
-        run: pnpm lint || echo '::warning::pnpm lint not yet configured'
+        run: pnpm lint
 
       - name: cargo fmt --check
         working-directory: src-tauri
-        run: cargo fmt --all -- --check || echo '::warning::cargo fmt not yet configured'
+        run: cargo fmt --all -- --check
 
       - name: cargo clippy
         working-directory: src-tauri
-        run: cargo clippy --workspace --all-targets -- -D warnings || echo '::warning::clippy gate will fail PRs from Phase 1 onward — set up the workspace first'
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
   # ---------------------------------------------------------------------------
   # typecheck — TypeScript no-emit.
@@ -119,15 +115,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: tsc --noEmit
-        run: pnpm exec tsc --noEmit || echo '::warning::tsc errors — fix before merging'
+        run: pnpm exec tsc --noEmit
 
   # ---------------------------------------------------------------------------
-  # test — unit + integration. Phase 5+ adds the TTFT bench, Phase 6 adds
-  # tool-card render gate, Phase 9 adds a11y, Phase 10 adds the canonical
-  # 3-provider snapshot test.
+  # test — unit + integration + i18n lint + a11y.
   # ---------------------------------------------------------------------------
   test:
-    name: Tests (cargo + pnpm)
+    name: Tests (cargo + pnpm + i18n + a11y)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -171,15 +165,19 @@ jobs:
 
       - name: cargo test --workspace
         working-directory: src-tauri
-        run: cargo test --workspace --all-features || echo '::warning::cargo tests not yet wired'
+        run: cargo test --workspace --all-features
 
       - name: pnpm test
-        run: pnpm test --passWithNoTests || echo '::warning::pnpm tests not yet wired'
+        run: pnpm test --passWithNoTests
 
-      # Phase 9 enables this gate (axe-core a11y on canonical screens).
+      # i18n lint: verifies all t('key') calls have entries in en.json.
+      # Script created in Phase 2 (scripts/check-i18n.js).
+      - name: pnpm check:i18n
+        run: pnpm check:i18n
+
+      # a11y gate: axe-core on canonical screens. Enabled from Phase 9 onward.
       - name: pnpm test:a11y
-        if: ${{ false }}  # flip to true when Phase 9 ships
-        run: pnpm test:a11y
+        run: pnpm test:a11y --passWithNoTests
 
   # ---------------------------------------------------------------------------
   # audit — security. cargo audit + pnpm audit. Both must be clean before merge.
@@ -199,7 +197,7 @@ jobs:
 
       - name: cargo audit
         working-directory: src-tauri
-        run: cargo audit || echo '::warning::cargo audit not yet clean'
+        run: cargo audit
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
@@ -216,7 +214,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: pnpm audit --prod
-        run: pnpm audit --prod || echo '::warning::pnpm audit --prod has open advisories'
+        run: pnpm audit --prod
 
   # ---------------------------------------------------------------------------
   # license — every dependency must be MIT/Apache-2.0/BSD compatible.
@@ -238,17 +236,34 @@ jobs:
         working-directory: src-tauri
         run: |
           cargo license --json > /tmp/cargo-licenses.json
-          # Fail if any license is NOT in the allowed set.
-          # Allowed: MIT, Apache-2.0 (any variant), BSD-2/3-Clause, ISC, Unlicense, Zlib.
-          # Disallowed: GPL-*, AGPL-*, LGPL-* (unless dynamically linked system lib),
-          # SSPL, BSL, EPL, MPL-* (case-by-case).
-          # Tools: jq + grep — wire when Phase 10 lands.
-          echo "::warning::license-scan gate will be wired in Phase 10"
+          # Fail on any GPL/AGPL/LGPL/SSPL/BSL/EPL/MPL dependency.
+          # Allowed set: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Unlicense, Zlib.
+          DISALLOWED=$(jq -r '.[] | select(
+            (.license // "") | test("GPL|LGPL|AGPL|SSPL|BSL|MPL"; "i")
+          ) | "\(.name) \(.version) (\(.license))"' /tmp/cargo-licenses.json)
+          if [ -n "$DISALLOWED" ]; then
+            echo "ERROR: disallowed licenses found in Cargo dependencies:"
+            echo "$DISALLOWED"
+            exit 1
+          fi
+          echo "Cargo license check passed."
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Install license-checker
-        run: npx --yes license-checker-rseidelsohn --production --excludePackages "biscuitcode" --failOn 'GPL-3.0;AGPL-3.0;LGPL-3.0;SSPL-1.0;BSL-1.1' || echo '::warning::license-checker not yet wired against pnpm install output'
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm license check
+        run: |
+          npx --yes license-checker-rseidelsohn \
+            --production \
+            --excludePackages "biscuitcode" \
+            --failOn 'GPL-3.0;AGPL-3.0;LGPL-3.0;SSPL-1.0;BSL-1.1'

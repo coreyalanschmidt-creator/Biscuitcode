@@ -1,0 +1,4 @@
+# Screenshots directory
+# Real screenshots (main-editor-chat.png, agent-activity.png, preview-split.png)
+# must be captured on a running Mint 22 XFCE instance before tagging v1.0.0.
+# See docs/RELEASE.md "Phase 7 — visual polish" for the checklist.

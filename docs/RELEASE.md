@@ -24,12 +24,12 @@ Plus optional:
 
 For each VM in the matrix:
 
-- [ ] Download `biscuitcode_<VERSION>_amd64.deb` and `biscuitcode_<VERSION>_amd64.deb.asc` from the release page.
-- [ ] `gpg --verify biscuitcode_<VERSION>_amd64.deb.asc biscuitcode_<VERSION>_amd64.deb` — signature is "Good".
+- [ ] Download `BiscuitCode_<VERSION>_amd64.deb` and `BiscuitCode_<VERSION>_amd64.deb.asc` from the release page.
+- [ ] `gpg --verify BiscuitCode_<VERSION>_amd64.deb.asc BiscuitCode_<VERSION>_amd64.deb` — signature is "Good".
 - [ ] `sha256sum -c SHA256SUMS.txt` (downloaded from the same release) — both .deb and .AppImage check out.
 - [ ] Install via GDebi (double-click): GUI installer opens, dependencies install cleanly, no "broken dependencies" message.
-- [ ] Alternatively: `sudo dpkg -i biscuitcode_<VERSION>_amd64.deb` succeeds; if any deps are missing `sudo apt -f install` resolves them.
-- [ ] Verify install: `dpkg -s biscuitcode | grep -F "Version: <VERSION>"` returns one line.
+- [ ] Alternatively: `sudo dpkg -i BiscuitCode_<VERSION>_amd64.deb` succeeds; if any deps are missing `sudo apt -f install` resolves them.
+- [ ] Verify install: `dpkg -s biscuit-code | grep -F "Version: <VERSION>"` returns one line.
 - [ ] **Whisker menu shows BiscuitCode under Development** with the BiscuitCode icon (NOT a generic gear or question mark).
 
 ## Phase 2 — first launch + onboarding
@@ -76,10 +76,10 @@ For the `.deb` path:
 
 ## Phase 6 — uninstall
 
-- [ ] `sudo apt remove biscuitcode` removes the binary, the `.desktop` file, all 7 icon sizes (`/usr/share/icons/hicolor/{16,32,48,64,128,256,512}x{same}/apps/biscuitcode.png`), and `/usr/bin/biscuitcode`.
+- [ ] `sudo apt remove biscuit-code` removes the binary, the `.desktop` file, all 7 icon sizes (`/usr/share/icons/hicolor/{16,32,48,64,128,256,512}x{same}/apps/biscuitcode.png`), and `/usr/bin/biscuitcode`.
 - [ ] Whisker menu no longer shows the entry.
 - [ ] User config under `~/.config/biscuitcode/`, `~/.local/share/biscuitcode/`, and `~/.cache/biscuitcode/` is preserved (apt remove is not purge).
-- [ ] `sudo apt purge biscuitcode` additionally removes nothing user-data-related (we DON'T delete user data on purge — confirm via `ls ~/.config/biscuitcode/`).
+- [ ] `sudo apt purge biscuit-code` additionally removes nothing user-data-related (we DON'T delete user data on purge — confirm via `ls ~/.config/biscuitcode/`).
 
 ## Phase 7 — visual polish
 
@@ -112,6 +112,14 @@ Failures here are logged in the release notes ("Wayland-Cinnamon: <known issue>"
 - [ ] `latest.json` for the Tauri AppImage updater published.
 
 If any of the above is not green, **do not tag the release**. Open issues for the failures, fix, re-run.
+
+## Known limitations for v1.0
+
+These are documented deferrals — do NOT block the release on them, but DO include them in the release notes:
+
+- **LSP hover / go-to-definition not implemented** (Open Question #19). The `monaco-languageclient` adapter was evaluated during Phase 9 and deferred: it pulls in the full VS Code extension host (~20 `@codingame/monaco-vscode-api` packages) with known Vite ESM issues. The LSP backend (`biscuitcode-lsp`) is wired for stdio transport but the frontend adapter is absent. Smoke-test item "Phase 3 — LSP" row will show rust-analyzer starting (backend process launches) but hover and go-to-definition will not respond. Mark that row as **known-fail / deferred** in the release notes; it does not block release.
+
+- **Wayland-XFCE not in smoke matrix.** XFCE 4.18 has no Wayland support; the Wayland-XFCE row is unreachable on Mint 22. Cinnamon-Wayland is best-effort only.
 
 ## After release
 

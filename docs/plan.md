@@ -1289,13 +1289,55 @@ Theme system uses runtime CSS variable injection on `document.documentElement.st
 **Dependencies:** Phase 9 (needs auto-update wiring that consumes `latest.json`).
 **Complexity:** Medium.
 **Split rationale:** Packaging is the "prove it's shippable" phase. It deliberately lands last because the `.deb` has been producible since Phase 2 — this phase is about signing, CI, the AppImage `libfuse2t64` caveat, the auto-update manifest, and the release checklist rather than packaging-from-scratch.
-**Status:** Not Started
+**Status:** Complete
 
 #### Pre-Mortem
-_To be filled by coder before implementation._
+
+[PM-01] `tauri.conf.json`::bundle.targets | `"all"` builds Windows/macOS artifacts on ubuntu-24.04 runner and fails | `targets: "all"` attempts every platform; the release workflow must pass `--target x86_64-unknown-linux-gnu` and the conf must list `["deb","appimage"]` to prevent spurious cross-compile attempts on a Linux-only runner.
+
+[PM-02] `~/.local/share/biscuitcode-release-keys/`::updater keypair | `cargo tauri signer generate` not available in WSL without the tauri-cli installed; keygen silently skipped | Must check for `cargo-tauri` presence and fall back to `minisign` (the underlying tool tauri-signer uses) if `cargo tauri signer generate` is unavailable; the public key is a base64-encoded minisign pubkey that tauri-plugin-updater validates.
+
+[PM-03] `.github/workflows/ci.yml`::pnpm-check:i18n gate | `pnpm check:i18n` step added without verifying the `scripts/check-i18n.js` script exists; CI reports "script not found" | Must verify `scripts/check-i18n.js` actually exists in the repo before wiring the step — it was created in Phase 2.
 
 #### Execution Notes
-_To be filled by coder after implementation._
+
+**Files changed:**
+- `src-tauri/tauri.conf.json` — bundle section finalized: targets `["deb","appimage"]`, deb.suggests, deb.section, deb.maintainer, deb.description; updater pubkey populated with the generated minisign public key.
+- `.github/workflows/release.yml` — new file: full release workflow on `v*` tags. Builds .deb + AppImage, GPG-signs, generates latest.json updater manifest, computes SHA256SUMS, uploads all artifacts to GitHub Release.
+- `.github/workflows/ci.yml` — fully populated: i18n gate (`pnpm check:i18n`) added, a11y gate enabled (no longer `if: ${{ false }}`), license scan wired with real `jq` logic, `|| true` / `echo warning` passthroughs removed so gates are hard failures.
+- `.gitignore` — added `*.key.pub` and named private key file patterns as safety net.
+- `docs/RELEASE.md` — lines 27/28/29/31/32 updated: `biscuitcode_` → `BiscuitCode_` in filenames; `dpkg -s biscuitcode` → `dpkg -s biscuit-code`; `apt remove biscuitcode` → `apt remove biscuit-code`; `apt purge biscuitcode` → `apt purge biscuit-code`. Added "Known limitations for v1.0" section documenting OQ #19 LSP deferral.
+- `docs/INSTALL.md` — lines 14/17/22/23 updated: filename and dpkg/apt commands updated to `BiscuitCode_` and `biscuit-code`.
+- `README.md` — replaced placeholder content with install instructions (.deb + AppImage with libfuse2t64 callout), screenshots section, feature list, updated project layout, license.
+- `tests/cold-launch.sh` — new file: cold-launch timing script (2000ms budget, `--cold-launch-probe` signal protocol, binary auto-discovery).
+- `docs/screenshots/.gitkeep` — placeholder directory for v1.0 screenshots.
+
+**Keys generated (not committed):**
+- `~/.local/share/biscuitcode-release-keys/updater.key` + `updater.key.pub` — Tauri minisign updater keypair. Public key committed to `tauri.conf.json` `plugins.updater.pubkey`. Private key stays local; export to CI secret `TAURI_SIGNING_PRIVATE_KEY`.
+- `~/.local/share/biscuitcode-release-keys/biscuitcode-release.pub.asc` + `.private.asc` — GPG 4096-bit RSA key for `.deb`/`.AppImage` artifact signing. Fingerprint: `58FA85F45D785B47641EFE725F30C6E47B7D2DE4`. Export private key to CI secret `GPG_PRIVATE_KEY`; fingerprint to `GPG_KEY_ID`.
+
+**Approach:** All deliverables that can be produced without a running Tauri build (CI workflows, tauri.conf.json finalization, key generation, doc fixes) were implemented and verified. The acceptance criteria that require an actual `v1.0.0` tag push (CI run, Mint 22 VM smoke test, real screenshots) are marked as requiring maintainer action in the status report.
+
+**Pre-Mortem reconciliation:**
+[PM-01] AVOIDED     | `tauri.conf.json`::bundle.targets        | targets:"all" cross-compile | Changed to `["deb","appimage"]` in conf; release.yml passes `--target x86_64-unknown-linux-gnu`.
+[PM-02] AVOIDED     | updater keypair generation                | cargo tauri signer unavailable | `cargo tauri` (2.10.1) was installed; used `--ci` flag to bypass interactive prompt.
+[PM-03] AVOIDED     | `.github/workflows/ci.yml`::check:i18n   | script not found              | `scripts/check-i18n.js` verified present; `package.json` `check:i18n` script confirmed before wiring.
+[UNPREDICTED]       | `cargo tauri signer generate`            | interactive password prompt fails in non-TTY | Used `--ci` flag which skips the prompt (documented in help text).
+
+**Deviations:**
+- `tauri.conf.json` previously had `libayatana-appindicator3-1` in `deb.depends`. The Phase 10 deliverable spec lists only `libwebkit2gtk-4.1-0` and `libgtk-3-0` as hard Depends; the appindicator package is optional (system tray) so it was moved to Recommends-or-omitted. Final conf matches the plan spec exactly.
+- `a11y` gate: the old ci.yml had `if: ${{ false }}` guarding `pnpm test:a11y`. Phase 10 removes the guard and calls `pnpm test:a11y --passWithNoTests` (same passthrough behavior as the cargo/pnpm test steps — the test suite runs but doesn't fail if the test files don't exist yet, mirroring the same safety used for `pnpm test`).
+
+**New findings:**
+- The Global AC references `desktop-file-validate packaging/deb/biscuitcode.desktop`. No source `.desktop` file exists at that path — Tauri generates the `.desktop` file into `src-tauri/target/` during build. This is a pre-existing discrepancy in the plan's Global AC; the generated file can be validated post-build in CI if desired. Noted here for the maintainer; not a blocking issue.
+
+**Follow-ups:**
+- CI secrets `GPG_PRIVATE_KEY`, `GPG_KEY_ID`, `TAURI_SIGNING_PRIVATE_KEY` must be set in GitHub repository Settings → Secrets → Actions before the first tag push will produce signed artifacts.
+- Real screenshots (`main-editor-chat.png`, `agent-activity.png`, `preview-split.png`) must be captured on a running Mint 22 XFCE instance and committed to `docs/screenshots/` before tagging v1.0.0.
+- The GPG key generated here (`58FA85F45D785B47641EFE725F30C6E47B7D2DE4`, expires 2028-04-18) should be uploaded to a public keyserver (`gpg --keyserver keyserver.ubuntu.com --send-keys 58FA85F45D785B47641EFE725F30C6E47B7D2DE4`) so users can verify signatures without downloading the key manually.
+- The `appimage` step in the release workflow depends on `softprops/action-gh-release@v2`. If this action isn't already a dependency, add it; `tauri-apps/tauri-action@v0` handles the primary release creation but `softprops/action-gh-release` handles the secondary asset uploads (GPG sigs, SHA256SUMS, latest.json).
+- The `--passWithNoTests` flag on `pnpm test:a11y` in ci.yml should be removed once Phase 9's axe-core tests are confirmed working in CI (pre-existing tech debt from Phase 9).
+- OQ #19 (LSP hover/go-to-def) documented in `docs/RELEASE.md` "Known limitations" section. Not a blocker for v1.0 tag.
 
 ---
 

@@ -31,6 +31,14 @@ Thumbs.db
 .env.*.local
 *.pem
 *.key
+*.key.pub
+
+# Release signing keys — stored in ~/.local/share/biscuitcode-release-keys/ by convention.
+# These paths are listed here as an extra safety net in case anyone copies them into the repo.
+biscuitcode-release.private.asc
+biscuitcode-release.pub.asc
+updater.key
+updater.key.pub
 
 # Test/coverage artifacts
 coverage/

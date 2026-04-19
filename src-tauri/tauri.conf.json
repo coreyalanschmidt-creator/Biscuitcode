@@ -34,12 +34,12 @@
         "https://github.com/Coreyalanschmidt-creator/biscuitcode/releases/latest/download/latest.json"
       ],
       "dialog": true,
-      "pubkey": ""
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhERDhDMkQxODMwRTExMEUKUldRT0VRNkQwY0xZalJUakRMdE8vZjlKOUpuZnJVYkltWjUrK1FKRCtpMjhKdmUrUytuMFh6REoK"
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["deb", "appimage"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -54,10 +54,22 @@
       "deb": {
         "depends": [
           "libwebkit2gtk-4.1-0",
-          "libgtk-3-0",
-          "libayatana-appindicator3-1"
+          "libgtk-3-0"
         ],
-        "recommends": ["gnome-keyring", "ollama"]
+        "recommends": [
+          "gnome-keyring",
+          "ollama"
+        ],
+        "suggests": [
+          "rust-analyzer",
+          "typescript-language-server",
+          "pyright",
+          "gopls",
+          "clangd"
+        ],
+        "section": "devel",
+        "maintainer": "Corey Alan Schmidt <coreyalanschmidt@gmail.com>",
+        "description": "An AI coding environment, served warm. VS Code-class editor with Claude, ChatGPT, and local Gemma 4 / Ollama models, built for Linux Mint 22 XFCE."
       }
     }
   }

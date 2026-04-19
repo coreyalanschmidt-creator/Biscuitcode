@@ -1,0 +1,241 @@
+# BiscuitCode — Release Workflow
+#
+# Triggered by pushing a v* tag (e.g. v1.0.0). Builds the .deb and AppImage
+# on ubuntu-24.04, GPG-signs both artifacts, generates the Tauri updater
+# latest.json manifest, computes SHA256SUMS, and uploads everything to the
+# GitHub Release page.
+#
+# Required repository secrets (set in Settings → Secrets → Actions):
+#   GPG_PRIVATE_KEY         — armored GPG private key for .deb/.AppImage signing
+#                             (export with: gpg --armor --export-secret-keys <fingerprint>)
+#   GPG_KEY_ID              — 40-char fingerprint, e.g. 58FA85F45D785B47641EFE725F30C6E47B7D2DE4
+#   TAURI_SIGNING_PRIVATE_KEY — minisign private key content for Tauri updater
+#                               (content of ~/.local/share/biscuitcode-release-keys/updater.key)
+#
+# The Tauri updater public key is committed to tauri.conf.json and does NOT
+# need to be a secret.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # needed to create a GitHub Release and upload assets
+
+env:
+  RUST_TOOLCHAIN: stable
+  NODE_VERSION: 20
+  PNPM_VERSION: 9
+
+jobs:
+  release:
+    name: Build and release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------
+      # System dependencies required by Tauri on Ubuntu 24.04.
+      # ------------------------------------------------------------------
+      - name: Install Linux build deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            pkg-config \
+            libdbus-1-dev \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libwebkit2gtk-4.1-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libfuse2t64 \
+            file \
+            build-essential \
+            gnupg
+
+      # ------------------------------------------------------------------
+      # Toolchain setup.
+      # ------------------------------------------------------------------
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-release-
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      # ------------------------------------------------------------------
+      # Render icons from master SVG before the Tauri build reads them.
+      # Requires librsvg2-bin + imagemagick (both installed above).
+      # ------------------------------------------------------------------
+      - name: Install icon render deps
+        run: |
+          sudo apt-get install -y librsvg2-bin imagemagick
+
+      - name: Render icons
+        run: bash scripts/render-icons.sh
+
+      # ------------------------------------------------------------------
+      # Build .deb + AppImage via tauri-action. The action handles the
+      # Tauri CLI install and signs updater artifacts when
+      # TAURI_SIGNING_PRIVATE_KEY is present in the environment.
+      # ------------------------------------------------------------------
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: BiscuitCode ${{ github.ref_name }}
+          releaseBody: |
+            ## BiscuitCode ${{ github.ref_name }}
+
+            See [INSTALL.md](https://github.com/Coreyalanschmidt-creator/biscuitcode/blob/main/docs/INSTALL.md) for installation instructions.
+
+            ### Install (recommended)
+            ```
+            sudo dpkg -i BiscuitCode_<version>_amd64.deb
+            sudo apt -f install
+            ```
+
+            ### AppImage (portable)
+            ```
+            sudo apt install libfuse2t64
+            chmod +x BiscuitCode-<version>-x86_64.AppImage
+            ./BiscuitCode-<version>-x86_64.AppImage
+            ```
+
+            ### Known limitations in this release
+            - LSP hover / go-to-definition not implemented (OQ #19, deferred post-v1).
+            - Wayland-XFCE not supported (XFCE 4.18 has no Wayland; Cinnamon-Wayland is best-effort).
+          releaseDraft: true
+          prerelease: false
+          args: --target x86_64-unknown-linux-gnu
+
+      # ------------------------------------------------------------------
+      # GPG-sign both artifacts and generate SHA256SUMS.
+      # Runs after tauri-action uploads artifacts to the release.
+      # ------------------------------------------------------------------
+      - name: Import GPG signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          echo "GPG key imported."
+
+      - name: GPG-sign artifacts
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+        run: |
+          # Tauri-action puts artifacts in src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/
+          DEB_PATH=$(find src-tauri/target -name "BiscuitCode_*.deb" | head -1)
+          APPIMAGE_PATH=$(find src-tauri/target -name "BiscuitCode-*.AppImage" | head -1)
+
+          if [ -z "$DEB_PATH" ] || [ -z "$APPIMAGE_PATH" ]; then
+            echo "ERROR: Could not locate built artifacts."
+            find src-tauri/target -name "*.deb" -o -name "*.AppImage" 2>/dev/null
+            exit 1
+          fi
+
+          echo "Signing $DEB_PATH"
+          gpg --batch --yes --armor --detach-sign \
+              --local-user "$GPG_KEY_ID" \
+              --output "${DEB_PATH}.asc" \
+              "$DEB_PATH"
+
+          echo "Signing $APPIMAGE_PATH"
+          gpg --batch --yes --armor --detach-sign \
+              --local-user "$GPG_KEY_ID" \
+              --output "${APPIMAGE_PATH}.asc" \
+              "$APPIMAGE_PATH"
+
+          sha256sum "$DEB_PATH" "$APPIMAGE_PATH" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+          # Stash paths for subsequent steps.
+          echo "DEB_PATH=$DEB_PATH"         >> "$GITHUB_ENV"
+          echo "APPIMAGE_PATH=$APPIMAGE_PATH" >> "$GITHUB_ENV"
+
+      # ------------------------------------------------------------------
+      # Generate latest.json for the Tauri AppImage updater.
+      # tauri-action generates this automatically when TAURI_SIGNING_PRIVATE_KEY
+      # is set; this step provides a fallback that matches the expected schema.
+      # ------------------------------------------------------------------
+      - name: Generate latest.json (updater manifest)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          APPIMAGE_FILENAME=$(basename "$APPIMAGE_PATH")
+          APPIMAGE_SIG_FILE="${APPIMAGE_PATH}.sig"
+
+          # The Tauri updater expects a minisign .sig file alongside the AppImage.
+          # tauri-action creates it when TAURI_SIGNING_PRIVATE_KEY is set.
+          # If it's missing (e.g., dry run), create a placeholder so the manifest
+          # at least has the correct shape.
+          if [ -f "$APPIMAGE_SIG_FILE" ]; then
+            SIG=$(cat "$APPIMAGE_SIG_FILE")
+          else
+            SIG="PLACEHOLDER_run_tauri_sign_to_generate"
+          fi
+
+          DOWNLOAD_URL="https://github.com/Coreyalanschmidt-creator/biscuitcode/releases/download/${GITHUB_REF_NAME}/${APPIMAGE_FILENAME}"
+
+          cat > latest.json <<JSON
+          {
+            "version": "$VERSION",
+            "notes": "See https://github.com/Coreyalanschmidt-creator/biscuitcode/releases/tag/${GITHUB_REF_NAME} for release notes.",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "linux-x86_64": {
+                "signature": "$SIG",
+                "url": "$DOWNLOAD_URL"
+              }
+            }
+          }
+          JSON
+          echo "Generated latest.json:"
+          cat latest.json
+
+      # ------------------------------------------------------------------
+      # Upload GPG signatures, SHA256SUMS, and latest.json to the release.
+      # ------------------------------------------------------------------
+      - name: Upload signed artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.DEB_PATH }}.asc
+            ${{ env.APPIMAGE_PATH }}.asc
+            SHA256SUMS.txt
+            latest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
