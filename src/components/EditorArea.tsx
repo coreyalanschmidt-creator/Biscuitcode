@@ -456,6 +456,11 @@ export function EditorArea() {
     return () => window.removeEventListener('keydown', onKey);
   }, [activeTabId, closeTab, reopenLastClosed]);
 
+  // Phase 8: keep window.__BISCUIT_WORKSPACE_ROOT__ in sync with the editorStore.
+  useEffect(() => {
+    window.__BISCUIT_WORKSPACE_ROOT__ = workspaceRoot ?? undefined;
+  }, [workspaceRoot]);
+
   const handleQuickSelect = useCallback(
     (relativePath: string) => {
       const fullPath = workspaceRoot ? `${workspaceRoot}/${relativePath}` : relativePath;

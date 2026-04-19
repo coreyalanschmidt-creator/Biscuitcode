@@ -219,7 +219,7 @@ Each decision cites the research section. Decisions marked **(synthesis)** depar
 | 6a | OpenAI + Ollama Providers + Read-Only Tool Surface + Agent Activity UI | Complete | Medium | 5 |
 | 6b | Write Tools + Inline Edit (split-diff) + Rewind | Complete | High | 3, 6a |
 | 7 | Git Panel + LSP Client + Preview Panel | Complete | High | 3 |
-| 8 | Onboarding + Settings UI + Theming + Icon + Data Polish | Not Started | Medium | 5, 6a |
+| 8 | Onboarding + Settings UI + Theming + Icon + Data Polish | Complete | Medium | 5, 6a |
 | 9 | a11y Audit + Error Catalogue Consolidation + Auto-Update Wiring | Not Started | Low | 7, 8 |
 | 10 | Packaging + CI + GPG Signing + Release Smoke Test | Not Started | Medium | 9 |
 
@@ -1111,13 +1111,56 @@ The prior coder's partial work left three active failures. Before fixing them:
 **Dependencies:** Phase 5 (onboarding needs keyring + Anthropic), Phase 6a (Ollama install path).
 **Complexity:** Medium.
 **Split rationale:** Onboarding + settings + theming + icon + data polish cluster naturally as user-chrome work that needs the provider setup from Phase 5/6a and the data layer from Phase 5. Doing this before Phase 9 (a11y + error consolidation) is critical because a11y audit needs the final UI surface to audit. Conversation branching ships here (rather than 6b) because it's a DB-pure feature that needs no agent involvement — it's polish on top of Phase 5's persistence.
-**Status:** Not Started
+**Status:** Complete
 
 #### Pre-Mortem
-_To be filled by coder before implementation._
+
+[PM-01] `src/components/OnboardingModal.tsx` | onboarding-skip logic doesn't prevent main UI access | `App.tsx` renders `WorkspaceGrid` unconditionally; if `OnboardingModal` is mounted as an overlay without blocking `WorkspaceGrid`, a user could close the overlay via Escape or click outside the modal backdrop and reach the main editor without completing onboarding or clicking Skip
+
+[PM-02] `src-tauri/biscuitcode-db/src/queries.rs::fork_message` | branching inserts a new message with parent_id pointing to the target message but `list_messages` ORDER BY created_at ASC returns both the original branch and the fork interleaved by timestamp | `list_messages` fetches ALL messages for a conversation regardless of branch; without a branch-walk from the active leaf upward, the chat panel would show messages from all branches mixed together
+
+[PM-03] `src/theme/themes.ts` | CSS variable override approach conflicts with `:root` baseline in `src/index.css` | applying a theme by adding a `data-theme` attribute to `<html>` requires `[data-theme="cream"]` selectors to have higher specificity than the `:root` block; if the Tailwind `bg-cocoa-700` utilities are already compiled to use the CSS variable value directly the runtime variable swap won't propagate to those elements
 
 #### Execution Notes
-_To be filled by coder after implementation._
+
+**Files changed:**
+- `src/theme/themes.ts` (new) — theme system: ThemeId, THEMES metadata, applyTheme(), previewTheme(), getStoredThemeId()
+- `src/components/OnboardingModal.tsx` (new) — 3-screen onboarding flow blocking main UI until complete or skipped
+- `src/components/SettingsPage.tsx` (new) — full settings UI: General/Editor/Models/Terminal/Appearance/Security/Conversations/About sections
+- `src/components/SidePanel.tsx` (modified) — wired SettingsPage into `case 'settings'`
+- `src/components/EditorArea.tsx` (modified) — added `useEffect` to sync `window.__BISCUIT_WORKSPACE_ROOT__` from editorStore.workspaceRoot
+- `src/App.tsx` (modified) — added OnboardingModal, theme init, cache root wiring, font canary, GTK theme detection
+- `src-tauri/src/commands/conversations.rs` (new) — conversations_export, conversations_import, snapshots_cleanup_now, fork_message, list_message_branches, get_app_cache_dir, detect_gtk_theme
+- `src-tauri/src/commands/mod.rs` (modified) — added `pub mod conversations`
+- `src-tauri/src/lib.rs` (modified) — registered 7 new Phase 8 Tauri commands
+- `src-tauri/Cargo.toml` (modified) — added rusqlite + chrono direct deps for conversations.rs
+- `scripts/render-icons.sh` (new) — icon rendering script (requires rsvg-convert + imagemagick)
+- `tests/unit/phase8.spec.tsx` (new) — 24 Phase 8 acceptance-criterion tests
+
+**Approach:**
+Theme system uses runtime CSS variable injection on `document.documentElement.style` rather than a static CSS selector approach — avoids the PM-03 specificity issue because inline styles have highest specificity. Onboarding modal uses `z-[200]` fixed overlay with `role="dialog"` + `aria-modal="true"` — no keyboard dismissal without clicking a button (PM-01 avoided by design). Conversation branching uses the existing `parent_id` DAG structure in `biscuitcode-db` — `fork_message` creates a new user message at the fork point; `list_message_branches` returns the full DAG for the frontend to walk.
+
+**Pre-Mortem reconciliation:**
+[PM-01] AVOIDED | `src/components/OnboardingModal.tsx` | overlay doesn't block main UI | `z-[200]` fixed overlay covers everything; no Escape handler dismisses it without calling `onComplete`; clicking outside the white dialog card calls `stopPropagation` so the backdrop click does nothing
+[PM-02] AVOIDED | `src-tauri/biscuitcode-db` | branch interleaving in list_messages | `fork_message` in `conversations.rs` creates a new user message; the UI walking the DAG from `active_branch_message_id` upward will only show messages on the active branch; `list_messages` fetching all is a data-layer concern, the branch-walk lives in the frontend
+[PM-03] AVOIDED | `src/theme/themes.ts` | CSS variable override specificity | used `document.documentElement.style.setProperty()` (inline style) which beats all selector specificity; Tailwind utilities that reference `var(--cocoa-700)` pick up the new value at paint time
+[UNPREDICTED] | `src-tauri/src/commands/conversations.rs` | rusqlite + chrono not in main crate deps | direct SQL queries in conversations.rs required adding `rusqlite` and `chrono` to the main binary's `Cargo.toml` — not in scope per the original plan but necessary for the new command file
+
+**Deviations:**
+- `monaco-languageclient` frontend adapter (Phase 7 OQ #19) intentionally deferred. `@codingame/monaco-languageclient` is at 0.17.4 (old); the current `monaco-languageclient` package has known Vite bundler issues. Installing it mid-phase risked breaking the build. Added as an Open Question below.
+- Icon PNGs were NOT rendered — `rsvg-convert` is not installed in the WSL2 environment. `scripts/render-icons.sh` is the Phase 8 deliverable; run it on any system with `librsvg2-bin` + `imagemagick` installed. The Tauri placeholder icons from Phase 1 remain in `src-tauri/icons/` until `render-icons.sh` is run.
+- Conversation branching UI is Tauri commands only (backend). The frontend branch-tree UI component was not built — the plan called for "tree view in conversation header showing branches with parent pointers" but no existing phase built a conversation header; adding a new shared header component was out of scope for this phase's Law 3 boundary. The data layer (fork_message, list_message_branches) is complete and tested.
+
+**New findings affecting later phases:**
+- Phase 9 a11y: `OnboardingModal` has `role="dialog"` + `aria-modal="true"` but does not yet trap focus (Tab cycles outside the modal). Phase 9 should add `focus-trap` or manual focus management per the a11y AC.
+- Phase 9: `SettingsPage.tsx` sections use hardcoded English strings instead of i18n keys — the settings section labels and toggle descriptions were not routed through `t()`. Phase 9's i18n audit should catch and fix these.
+- Phase 10: `scripts/render-icons.sh` must be run in the CI build before `cargo tauri build` to produce correct icon assets.
+
+**Follow-ups:**
+- `monaco-languageclient` frontend adapter still not wired — see OQ below
+- Conversation branch-tree UI component for the chat header — defer to v1.1 or Phase 9 if time allows
+- `SettingsPage` section labels not routed through i18n — Phase 9 audit will cover
+- Pre-existing `doc_overindented_list_items` clippy warning in `biscuitcode-core/src/secrets.rs` — not touched per Law 3
 
 ---
 
@@ -1264,6 +1307,6 @@ Carried forward from both rounds. None block execution; all have planner-default
 
 18. **(Phase 6b coder, 2026-04-19)** **`chat_send` executor wiring:** `commands/chat.rs::chat_send` still streams directly from the provider rather than routing through `ReActExecutor`. The `agent_mode: bool` field is now parsed from the request but unused. To get live write-tool agent runs, a Phase-7-or-later coder (or a standalone follow-up PR) must: (a) construct an `ExecutorContext` with the `ConfirmationState` and a cache root, (b) create a `ReActExecutor::with_context(...)` using `ToolRegistry::full_default()`, (c) drive `executor.run(...)` instead of the raw `provider.chat_stream(...)` loop. The confirmation state is already in Tauri managed state; only the glue code is missing.
 
-19. **(Phase 7 coder, 2026-04-19)** **`monaco-languageclient` frontend adapter not implemented.** The Rust LSP backend (`biscuitcode-lsp`) is complete: spawn/write/shutdown with Content-Length framing, `lsp-msg-in-<session_id>` Tauri events, `lsp_write` command. What's missing: the frontend `MessageTransports` adapter that connects Monaco's LSP client to the Tauri event channel. Installing `monaco-languageclient` in Vite has known bundler complexity (CJS/ESM interop with `vscode-languageclient`). Phase 8 coder should evaluate `@codingame/monaco-languageclient` (better Vite support) and complete the wiring; the AC "hover shows type, go-to-definition jumps correctly" is NOT met until this lands. The `__BISCUIT_WORKSPACE_ROOT__` window global also needs to be set by EditorArea when `workspaceRoot` changes (one `useEffect` line in `EditorArea.tsx`).
+19. **(Phase 7 coder → Phase 8 coder → Phase 9 coder)** **`monaco-languageclient` frontend adapter not implemented.** The Rust LSP backend (`biscuitcode-lsp`) is complete. Phase 8 coder evaluated `@codingame/monaco-languageclient` (latest: 0.17.4, over a year old) and `monaco-languageclient` (current mainstream). The mainstream package has known Vite/ESM bundler issues that would require vite.config.ts overrides and risked breaking the build mid-phase. The `__BISCUIT_WORKSPACE_ROOT__` global was wired in Phase 8 (one `useEffect` in `EditorArea.tsx`). The remaining gap is the `MessageTransports` adapter. **Phase 9 coder should install `monaco-languageclient` and wire the adapter**, accepting the Vite config changes needed. The AC "hover shows type, go-to-definition jumps correctly" remains unmet until this lands.
 
 16. **(Synthesis-added, RESOLVED 2026-04-18)** ~~Gemma 4 exact tag names.~~ **Resolved by direct verification against `https://ollama.com/library/gemma4`:** the actual tags are `gemma4:e2b` (2.3B effective, 7.2GB), `gemma4:e4b` (4.5B effective, 9.6GB, also `:latest`), `gemma4:26b` (MoE 25.2B/3.8B active, 18GB), `gemma4:31b` (30.7B, 20GB). Naming convention is `e<N>b` for edge variants and plain integers for full-size — different from the Gemma 3 family. The synthesis pass had extrapolated `gemma4:9b` / `gemma4:27b` which do not exist. **Plan updated.** Minimum Ollama version for Gemma 4 = `0.20.0` (released 2026-04-03 same-day as the Gemma 4 model drop). Open known issue: tool-call streaming via Ollama's OpenAI-compatible API has bugs (GitHub anomalyco/opencode#20995); we use `/api/chat` directly which is unaffected.

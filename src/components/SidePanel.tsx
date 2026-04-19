@@ -15,6 +15,7 @@ import { ChevronRight, ChevronDown, File, Folder, FolderOpen } from 'lucide-reac
 import { usePanelsStore } from '../state/panelsStore';
 import { useEditorStore } from '../state/editorStore';
 import { GitPanel } from './GitPanel';
+import { SettingsPage } from './SettingsPage';
 
 // ---------------------------------------------------------------------------
 // File tree types
@@ -572,9 +573,10 @@ export function SidePanel() {
 
   const renderContent = () => {
     switch (activeActivity) {
-      case 'files':  return <FilesPanel />;
-      case 'search': return <FindInFilesPanel />;
-      case 'git':    return <GitPanel />;
+      case 'files':    return <FilesPanel />;
+      case 'search':   return <FindInFilesPanel />;
+      case 'git':      return <GitPanel />;
+      case 'settings': return <SettingsPage />;
       default:
         return (
           <div className="px-3 py-4 text-sm text-cocoa-300">

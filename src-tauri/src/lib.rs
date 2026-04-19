@@ -100,6 +100,14 @@ pub fn run() {
             commands::lsp::lsp_shutdown,
             commands::lsp::lsp_list_sessions,
             commands::lsp::lsp_detect_languages,
+            // Phase 8 — conversations + settings
+            commands::conversations::get_app_cache_dir,
+            commands::conversations::detect_gtk_theme,
+            commands::conversations::conversations_export,
+            commands::conversations::conversations_import,
+            commands::conversations::snapshots_cleanup_now,
+            commands::conversations::fork_message,
+            commands::conversations::list_message_branches,
         ])
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();

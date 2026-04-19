@@ -66,6 +66,10 @@ anyhow = "1.0"
 ignore = "0.4"   # gitignore-respecting walker
 regex = "1"      # used in fs_search_content for regex mode
 
+# Phase 8 — conversations.rs needs rusqlite + chrono directly (same versions as biscuitcode-db)
+rusqlite = { version = "0.32", features = ["bundled"] }
+chrono = { version = "0.4", features = ["serde"] }
+
 [dev-dependencies]
 tempfile = "3"   # ephemeral temp dirs in fs.rs unit tests
 
