@@ -8,7 +8,20 @@ Pipeline through synthesis is complete; `docs/plan.md` is the 12-phase source of
 
 The build/install/launch verification of any phase happens on WSL2. **Authoring source files from Windows is fine; building/running them from Windows is forbidden.**
 
-**Pipeline run:** bootstrap → research-r1 → plan-r1 → review-r1 → research-r2 → plan-r2 → review-r2 → synthesis (plan.md + self-audit) → Phase 0/1 file-only deliverables → Q16 Gemma 4 verification → Phase 1/6a/8/10 file-only deliverables + Concept C/D fix → architectural design docs (PROVIDER-TRAIT, AGENT-LOOP, CAPABILITIES) + ERROR-CATALOGUE + RELEASE checklist + CLAUDE.md update → Phase 1 brand-locking source files.
+**Pipeline run:** bootstrap → research-r1 → plan-r1 → review-r1 → research-r2 → plan-r2 → review-r2 → synthesis (plan.md + self-audit) → Phase 0/1 file-only deliverables → Q16 Gemma 4 verification → Phase 1/6a/8/10 file-only deliverables + Concept C/D fix → architectural design docs (PROVIDER-TRAIT, AGENT-LOOP, CAPABILITIES) + ERROR-CATALOGUE + RELEASE checklist + CLAUDE.md update → Phase 1 brand-locking source (15 files) → Phase 2 layout + shortcuts + 8 component shells + toast + palette → Phase 5 foundation (biscuitcode-providers + biscuitcode-db crates with Anthropic/OpenAI/Ollama skeletons + initial migration) → Phase 4 foundation (biscuitcode-pty crate skeleton) → Phase 6 foundation (biscuitcode-agent crate with Tool trait, ToolRegistry, ReActExecutor, read_file impl) → Phase 7 foundation (biscuitcode-lsp crate skeleton).
+
+**Crate inventory** (all under `src-tauri/`):
+
+| Crate | Phase | Status |
+|---|---|---|
+| `biscuitcode-core`      | 1   | palette + errors enum complete; tested |
+| `biscuitcode-providers` | 5/6a | trait + types + Anthropic/OpenAI/Ollama skeletons (chat_stream TODO); Gemma 4 RAM tier helpers tested |
+| `biscuitcode-db`        | 5   | rusqlite + WAL + migration runner + initial schema (workspaces/conversations/messages/snapshots/snapshot_files); tests pass on in-memory |
+| `biscuitcode-pty`       | 4   | API surface + SessionId + detect_shell complete; PtyRegistry impl is TODO |
+| `biscuitcode-agent`     | 6a/6b | Tool trait + ToolRegistry + ReActExecutor with pause semantics + read_file complete + search_code stub; write tools + confirmation + snapshot/rewind in 6b |
+| `biscuitcode-lsp`       | 7   | Language enum with binary/args/install_command + detect_languages_in + LspRegistry skeleton |
+
+The WSL2 coder for each phase fills in the marked TODO blocks; the trait surfaces, type signatures, default models, RAM tier tables, and test expectations are locked.
 
 ## What's in the repo now
 
