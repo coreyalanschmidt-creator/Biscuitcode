@@ -14,11 +14,19 @@
 #![warn(missing_docs)]
 
 pub mod anthropic;
+pub mod ollama;
+pub mod openai;
 pub mod r#trait;
 pub mod types;
 
 pub use r#trait::ModelProvider;
 pub use types::{
     ChatEvent, ChatOptions, ContentBlock, MentionKind, Message, MessageRole,
-    ModelInfo, ProviderError, Role, ToolCall, ToolResult, ToolSpec, Usage,
+    ModelInfo, ProviderError, ReasoningEffort, Role, ToolCall, ToolResult, ToolSpec, Usage,
 };
+
+pub use anthropic::AnthropicProvider;
+pub use ollama::{
+    OllamaProvider, agent_mode_preferred, gemma3_fallback_for_ram_gb, gemma4_tag_for_ram_gb,
+};
+pub use openai::OpenAIProvider;
