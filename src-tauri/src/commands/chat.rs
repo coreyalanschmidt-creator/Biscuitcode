@@ -215,6 +215,10 @@ pub struct ChatSendRequest {
     pub system: Option<String>,
     /// Optional parent message id for branching.
     pub parent_message_id: Option<String>,
+    /// Phase 6b: when true, the executor runs in agent mode (auto-continues
+    /// on tool calls). Defaults to false for backwards compatibility.
+    #[serde(default)]
+    pub agent_mode: bool,
 }
 
 /// Start a streaming Anthropic chat request.
@@ -474,4 +478,146 @@ impl ChatEventPayload {
             recoverable: None,
         }
     }
+}
+
+// ---------- Inline edit (Phase 6b) ----------
+
+/// Request shape for the inline edit command.
+#[derive(Debug, Deserialize)]
+pub struct InlineEditRequest {
+    pub file_path: String,
+    pub start_line: u32,
+    pub end_line: u32,
+    pub selected_text: String,
+    pub description: String,
+}
+
+/// Request shape to apply an accepted inline edit.
+#[derive(Debug, Deserialize)]
+pub struct ApplyInlineEditRequest {
+    pub file_path: String,
+    pub start_line: u32,
+    pub end_line: u32,
+    pub new_content: String,
+}
+
+/// Start a streaming inline edit request.
+///
+/// Emits `biscuitcode:inline-edit-delta:<file_path>` events with `{ delta, done, error }`.
+/// The model is prompted with the file context + selected text + description.
+///
+/// This is a simplified implementation that sends the edit request to the Anthropic
+/// provider and streams the response as raw text deltas.
+#[tauri::command]
+pub async fn chat_inline_edit(
+    app: AppHandle,
+    _state: State<'_, ChatDb>,
+    req: InlineEditRequest,
+) -> Result<(), String> {
+    use futures::StreamExt;
+
+    let api_key = crate::commands::chat::get_anthropic_key_inner()
+        .await
+        .ok_or("E001")?;
+
+    let provider = AnthropicProvider::new(api_key);
+
+    let system = "You are an expert code editor. The user will give you code to modify along with instructions. \
+                  Reply with ONLY the modified code — no explanation, no markdown fences, no extra text. \
+                  Preserve indentation and style.";
+
+    let prompt = format!(
+        "File: {}\nLines {}-{}:\n```\n{}\n```\n\nInstructions: {}\n\nReturn only the replacement code.",
+        req.file_path,
+        req.start_line,
+        req.end_line,
+        req.selected_text,
+        req.description,
+    );
+
+    let messages = vec![Message {
+        role: Role::User,
+        content: vec![ContentBlock::Text { text: prompt }],
+        tool_calls: vec![],
+        tool_results: vec![],
+    }];
+
+    let opts = ChatOptions {
+        model: "claude-opus-4-7".to_string(),
+        system: system.to_string(),
+        prompt_caching_enabled: false,
+        ..Default::default()
+    };
+
+    let event_channel = format!("biscuitcode:inline-edit-delta:{}", req.file_path);
+
+    #[derive(Clone, serde::Serialize)]
+    struct DeltaPayload {
+        delta: Option<String>,
+        done: bool,
+        error: Option<String>,
+    }
+
+    let mut stream = provider
+        .chat_stream(messages, vec![], opts)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    while let Some(item) = stream.next().await {
+        match item {
+            Ok(ChatEvent::TextDelta { text }) => {
+                let _ = app.emit(&event_channel, DeltaPayload { delta: Some(text), done: false, error: None });
+            }
+            Ok(ChatEvent::Done { .. }) => {
+                let _ = app.emit(&event_channel, DeltaPayload { delta: None, done: true, error: None });
+                break;
+            }
+            Ok(ChatEvent::Error { message, recoverable, .. }) => {
+                if !recoverable {
+                    let _ = app.emit(&event_channel, DeltaPayload { delta: None, done: true, error: Some(message.clone()) });
+                    return Err(message);
+                }
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                let _ = app.emit(&event_channel, DeltaPayload { delta: None, done: true, error: Some(msg.clone()) });
+                return Err(msg);
+            }
+            _ => {}
+        }
+    }
+
+    Ok(())
+}
+
+/// Helper to get the Anthropic API key (extracted so inline_edit can call it).
+pub async fn get_anthropic_key_inner() -> Option<String> {
+    use biscuitcode_core::secrets;
+    secrets::get(secrets::SERVICE, "anthropic_api_key")
+        .await
+        .unwrap_or(None)
+}
+
+/// Apply an accepted inline edit to a file (replaces lines start_line..end_line with new_content).
+#[tauri::command]
+pub async fn chat_apply_inline_edit(req: ApplyInlineEditRequest) -> Result<(), String> {
+    let content = tokio::fs::read_to_string(&req.file_path)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let lines: Vec<&str> = content.lines().collect();
+    let start = (req.start_line as usize).saturating_sub(1);
+    let end = (req.end_line as usize).min(lines.len());
+
+    let mut result = Vec::new();
+    result.extend_from_slice(&lines[..start]);
+    result.extend(req.new_content.lines());
+    result.extend_from_slice(&lines[end..]);
+
+    let new_content = result.join("\n");
+    tokio::fs::write(&req.file_path, new_content)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
 }

@@ -12,6 +12,8 @@ import { useGlobalShortcuts } from './shortcuts/global';
 import { WorkspaceGrid } from './layout/WorkspaceGrid';
 import { ToastLayer } from './components/ToastLayer';
 import { CommandPalette } from './components/CommandPalette';
+import { ConfirmationModal } from './components/ConfirmationModal';
+import { InlineEditPane } from './components/InlineEditPane';
 
 export default function App() {
   // Install global keyboard shortcut handlers once at mount.
@@ -22,6 +24,10 @@ export default function App() {
       <WorkspaceGrid />
       <ToastLayer />
       <CommandPalette />
+      {/* Phase 6b — write-tool confirmation gate */}
+      <ConfirmationModal />
+      {/* Phase 6b — inline AI edit split-diff */}
+      <InlineEditPane />
     </>
   );
 }

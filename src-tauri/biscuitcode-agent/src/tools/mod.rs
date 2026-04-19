@@ -15,13 +15,11 @@ use thiserror::Error;
 use biscuitcode_db::ConversationId;
 use biscuitcode_providers::ToolSpec;
 
+pub mod apply_patch;
 pub mod read_file;
+pub mod run_shell;
 pub mod search_code;
-
-// Phase 6b will land:
-// pub mod write_file;
-// pub mod apply_patch;
-// pub mod run_shell;
+pub mod write_file;
 
 // ---------- Tool surface ----------
 
@@ -133,6 +131,17 @@ impl ToolRegistry {
         r.register(Arc::new(search_code::SearchCodeTool));
         r
     }
+
+    /// Phase 6b full registry: read + write + shell tools.
+    pub fn full_default() -> Self {
+        let mut r = Self::new();
+        r.register(Arc::new(read_file::ReadFileTool));
+        r.register(Arc::new(search_code::SearchCodeTool));
+        r.register(Arc::new(write_file::WriteFileTool));
+        r.register(Arc::new(apply_patch::ApplyPatchTool));
+        r.register(Arc::new(run_shell::RunShellTool));
+        r
+    }
 }
 
 impl Default for ToolRegistry {
@@ -147,6 +156,13 @@ impl Default for ToolRegistry {
 pub enum ToolError {
     #[error("path {path} is outside the workspace root")]
     OutsideWorkspace { path: String },
+
+    /// File not found within the workspace. Distinct from OutsideWorkspace
+    /// so the model gets a clear "file doesn't exist" signal rather than
+    /// a confusing workspace-escape error for a typo'd path.
+    /// (Phase 6a follow-up, implemented in Phase 6b.)
+    #[error("file not found: {path}")]
+    FileNotFound { path: String },
 
     #[error("io: {0}")]
     Io(#[from] std::io::Error),

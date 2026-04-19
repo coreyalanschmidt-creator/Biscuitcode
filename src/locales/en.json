@@ -4,7 +4,6 @@
     "schema_version": 1,
     "comment": "BiscuitCode i18n bundle, English. Source of truth for every user-facing string. CI test (Phase 2 + 9) asserts every t('key') lookup in src/ resolves here. Add new keys at the bottom of each section as phases register them. Do NOT remove keys after they ship — translation effort would be wasted."
   },
-
   "common": {
     "appName": "BiscuitCode",
     "tagline": "An AI coding environment, served warm.",
@@ -18,11 +17,9 @@
     "copyCommand": "Copy command",
     "openSettings": "Open Settings"
   },
-
   "shortcuts": {
     "registered_placeholder": "{{shortcut}} registered; wiring lands in Phase {{phase}}"
   },
-
   "panels": {
     "sidePanel": "Side Panel",
     "bottomPanel": "Bottom Panel",
@@ -40,24 +37,22 @@
     "output": "Output",
     "comingSoon": "content lands in a later phase."
   },
-
   "editor": {
     "area": "Editor area",
     "tabList": "Open files",
     "dirtyIndicator": "Unsaved changes",
     "closeTab": "Close {{name}}",
     "noFileOpen": "No file open",
-    "loading": "Loading\u2026",
+    "loading": "Loading…",
     "welcomeHint": "Open a folder to start coding.",
     "quickOpen": "Quick open file",
-    "quickOpenPlaceholder": "Type a filename\u2026",
+    "quickOpenPlaceholder": "Type a filename…",
     "noResults": "No matching files"
   },
-
   "fileTree": {
     "aria": "File explorer",
     "noFolder": "No folder open.",
-    "openFolder": "Open Folder\u2026",
+    "openFolder": "Open Folder…",
     "changeFolder": "Change folder",
     "contextMenu": "File actions",
     "newFile": "New File",
@@ -68,15 +63,13 @@
     "openInTerminal": "Open in Terminal",
     "revealInFileManager": "Reveal in File Manager"
   },
-
   "search": {
-    "placeholder": "Search in files\u2026",
+    "placeholder": "Search in files…",
     "regex": "Regex",
     "caseSensitive": "Case sensitive",
-    "searching": "Searching\u2026",
+    "searching": "Searching…",
     "noResults": "No results found."
   },
-
   "errors": {
     "E001": {
       "msg": "BiscuitCode needs a system keyring to store API keys safely. Install gnome-keyring with the command below."
@@ -133,7 +126,6 @@
       "msg": "Couldn't download the update: {{reason}}. Try again later or download manually from the releases page."
     }
   },
-
   "settings": {
     "providers": {
       "title": "Models & Providers",
@@ -149,7 +141,6 @@
       "landsInPhase": "Lands in Phase {{phase}}"
     }
   },
-
   "chat": {
     "you": "You",
     "assistant": "Assistant",
@@ -169,9 +160,15 @@
     "agentModeLabel": "Agent mode",
     "agentModeTitle": "Agent mode: the AI will automatically use tools to complete your request",
     "mentionPickerLabel": "File mention picker",
-    "mentionNoResults": "No matching files"
+    "mentionNoResults": "No matching files",
+    "apply": "Apply",
+    "run": "Run",
+    "applyCode": "Apply code to editor",
+    "runCode": "Run code in terminal (no auto-exec)",
+    "rewind": "Rewind",
+    "rewindLabel": "Rewind conversation to before this step",
+    "rewindError": "Rewind failed. Check the terminal for details."
   },
-
   "agent": {
     "emptyHint": "No tool calls yet. Enable agent mode and send a message to see the AI work.",
     "running": "running…",
@@ -181,9 +178,30 @@
       "running": "Running",
       "ok": "Done",
       "error": "Error"
-    }
+    },
+    "confirmWriteTitle": "Allow file write?",
+    "confirmShellTitle": "Allow shell command?",
+    "confirmSummaryLabel": "Tool summary",
+    "confirmApprove": "Allow",
+    "confirmDeny": "Deny",
+    "confirmDenyWithFeedback": "Deny + feedback",
+    "confirmSendFeedback": "Send feedback",
+    "confirmFeedbackLabel": "Feedback for the agent",
+    "confirmFeedbackPlaceholder": "Tell the agent what to do instead…",
+    "toolClassWrite": "write",
+    "toolClassShell": "shell",
+    "inlineEditTitle": "AI Inline Edit",
+    "inlineEditInputLabel": "Describe the change",
+    "inlineEditPlaceholder": "E.g. \"Add error handling\", \"Rename to camelCase\"…",
+    "inlineEditGenerate": "Generate",
+    "inlineEditGenerating": "Generating…",
+    "inlineEditAccept": "Accept",
+    "inlineEditReject": "Reject",
+    "inlineEditRegenerate": "Regenerate",
+    "inlineEditDiffLabel": "Proposed change (left: original, right: proposed)",
+    "inlineEditError": "Failed to generate inline edit.",
+    "inlineEditApplyError": "Failed to apply inline edit."
   },
-
   "onboarding": {
     "welcome": {
       "title": "Welcome to BiscuitCode",

@@ -20,5 +20,8 @@
 pub mod executor;
 pub mod tools;
 
-pub use executor::{ReActExecutor, RunOutcome};
+pub use executor::{
+    confirmation::{ConfirmationRequest, Decision, PendingConfirmations},
+    ReActExecutor, RunOutcome,
+};
 pub use tools::{Tool, ToolClass, ToolCtx, ToolError, ToolRegistry, ToolResult};

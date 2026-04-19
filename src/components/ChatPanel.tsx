@@ -15,7 +15,7 @@
 // - Streaming tokens via `biscuitcode:chat-event:<convId>` Tauri event
 // - SQLite persistence via chat_create_conversation / chat_list_messages
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -38,6 +38,10 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   text: string;         // markdown content
   streaming: boolean;
+  /** DB message_id — set after the message is persisted. */
+  dbMessageId?: string;
+  /** True if this assistant message performed write/shell tools (has a snapshot). */
+  hasSnapshot?: boolean;
 }
 
 interface ChatEventPayload {
@@ -453,6 +457,70 @@ export function ChatPanel() {
     };
   }, []);
 
+  // ---------- Rewind ----------
+
+  const handleRewind = useCallback(async (msg: ChatMessage) => {
+    if (!msg.dbMessageId || !conversationId) return;
+    try {
+      // Use a sensible default cache root. Phase 8 will wire this from app dir.
+      const cacheRoot = `${(window as Window & { __BISCUIT_CACHE_ROOT__?: string }).__BISCUIT_CACHE_ROOT__ ?? '/tmp/biscuitcode-cache'}`;
+      await invoke('agent_rewind', {
+        req: {
+          conversation_id: conversationId,
+          rewind_to_message_id: msg.dbMessageId,
+          cache_root: cacheRoot,
+        },
+      });
+      // Remove messages after the rewound message from local state.
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === msg.id);
+        return idx === -1 ? prev : prev.slice(0, idx + 1);
+      });
+    } catch (e) {
+      const errMsg = typeof e === 'string' ? e : t('chat.rewindError');
+      // eslint-disable-next-line no-console
+      console.error('Rewind failed:', errMsg);
+    }
+  }, [conversationId, t]);
+
+  // ---------- Code block components (Apply / Run) ----------
+
+  const CodeBlock = useCallback(({ children, className }: { children?: React.ReactNode; className?: string }) => {
+    const code = String(children ?? '').replace(/\n$/, '');
+    const language = className?.replace('language-', '') ?? '';
+    return (
+      <div className="relative group my-2">
+        <pre className={`${className ?? ''} rounded bg-cocoa-800 p-3 text-xs font-mono overflow-x-auto`}>
+          <code>{code}</code>
+        </pre>
+        <div className="absolute top-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            aria-label={t('chat.applyCode')}
+            title={t('chat.applyCode')}
+            onClick={() => {
+              // Dispatch to EditorArea to apply patch / write contents.
+              window.dispatchEvent(new CustomEvent('biscuitcode:apply-code', { detail: { code, language } }));
+            }}
+            className="text-[10px] px-1.5 py-0.5 rounded bg-cocoa-600 border border-cocoa-400 text-cocoa-200 hover:bg-biscuit-500 hover:text-cocoa-900 transition-colors"
+          >
+            {t('chat.apply')}
+          </button>
+          <button
+            aria-label={t('chat.runCode')}
+            title={t('chat.runCode')}
+            onClick={() => {
+              // Push code to a new terminal tab (no auto-exec — user hits Enter).
+              window.dispatchEvent(new CustomEvent('biscuitcode:run-code', { detail: { code } }));
+            }}
+            className="text-[10px] px-1.5 py-0.5 rounded bg-cocoa-600 border border-cocoa-400 text-cocoa-200 hover:bg-accent-ok hover:text-cocoa-900 transition-colors"
+          >
+            {t('chat.run')}
+          </button>
+        </div>
+      </div>
+    );
+  }, [t]);
+
   // ---------- Render helpers ----------
 
   const renderMessage = (msg: ChatMessage) => {
@@ -463,14 +531,36 @@ export function ChatPanel() {
         className={`px-3 py-2 text-sm ${isUser ? 'text-cocoa-100' : 'text-cocoa-50'}`}
       >
         <div
-          className={`text-[11px] font-semibold uppercase tracking-wider mb-1 ${
+          className={`text-[11px] font-semibold uppercase tracking-wider mb-1 flex items-center gap-2 ${
             isUser ? 'text-biscuit-400' : 'text-cocoa-300'
           }`}
         >
-          {isUser ? t('chat.you') : t('chat.assistant')}
+          <span>{isUser ? t('chat.you') : t('chat.assistant')}</span>
+          {/* Rewind button — only on non-streaming assistant messages with a snapshot */}
+          {!isUser && !msg.streaming && msg.hasSnapshot && (
+            <button
+              aria-label={t('chat.rewindLabel')}
+              title={t('chat.rewindLabel')}
+              onClick={() => handleRewind(msg)}
+              className="ml-auto text-[10px] px-1.5 py-0.5 rounded border border-cocoa-400 text-cocoa-400 hover:text-accent-warn hover:border-accent-warn/40 transition-colors"
+            >
+              ↩ {t('chat.rewind')}
+            </button>
+          )}
         </div>
         <div className="prose prose-invert prose-sm max-w-none">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              code: ({ children, className, ...props }) => {
+                const isBlock = String(children).includes('\n') || className;
+                if (isBlock) {
+                  return <CodeBlock className={className}>{children}</CodeBlock>;
+                }
+                return <code className="bg-cocoa-800 px-1 rounded text-xs font-mono" {...props}>{children}</code>;
+              },
+            }}
+          >
             {msg.text || (msg.streaming ? '▋' : '')}
           </ReactMarkdown>
         </div>

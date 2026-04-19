@@ -41,6 +41,8 @@ biscuitcode-pty = { path = "biscuitcode-pty" }
 # Phase 5 — providers + DB.
 biscuitcode-providers = { path = "biscuitcode-providers" }
 biscuitcode-db = { path = "biscuitcode-db" }
+# Phase 6b — agent + write tools + snapshot/rewind.
+biscuitcode-agent = { path = "biscuitcode-agent" }
 
 # Phase 5 — futures for streaming Tauri events
 futures = "0.3"

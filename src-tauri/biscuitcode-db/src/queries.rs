@@ -7,7 +7,8 @@ use chrono::Utc;
 use rusqlite::{params, Row};
 
 use crate::types::{
-    Conversation, ConversationId, DbError, MessageId, StoredMessage, Workspace, WorkspaceId,
+    Conversation, ConversationId, DbError, MessageId, Snapshot, SnapshotFile, SnapshotId,
+    StoredMessage, WorkspaceId,
 };
 use crate::Database;
 use biscuitcode_providers::{ContentBlock, MessageRole, ToolCall, ToolResult, Usage};
@@ -264,6 +265,170 @@ fn str_to_role(s: &str) -> MessageRole {
     }
 }
 
+// ---------- Snapshot helpers (Phase 6b) ----------
+
+impl Database {
+    /// Insert a snapshot manifest row and its file entries.
+    /// Returns the generated `SnapshotId`.
+    pub fn insert_snapshot(
+        &mut self,
+        conversation_id: &ConversationId,
+        message_id: &MessageId,
+        tool_call_id: &str,
+        tool_name: &str,
+        files: &[SnapshotFile],
+    ) -> Result<SnapshotId, DbError> {
+        let id = SnapshotId::new();
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO snapshots \
+             (snapshot_id, conversation_id, message_id, tool_call_id, tool_name, snapshotted_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                id.0,
+                conversation_id.0,
+                message_id.0,
+                tool_call_id,
+                tool_name,
+                now,
+            ],
+        )?;
+
+        for f in files {
+            self.conn.execute(
+                "INSERT INTO snapshot_files \
+                 (snapshot_id, abs_path, snapshot_filename, pre_sha256, pre_size_bytes, pre_existed) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    id.0,
+                    f.abs_path,
+                    f.snapshot_filename,
+                    f.pre_sha256,
+                    f.pre_size_bytes.map(|s| s as i64),
+                    i64::from(f.pre_existed),
+                ],
+            )?;
+        }
+
+        Ok(id)
+    }
+
+    /// Link a snapshot to an assistant message (set `messages.snapshot_id`).
+    pub fn link_snapshot_to_message(
+        &self,
+        message_id: &MessageId,
+        snapshot_id: &SnapshotId,
+    ) -> Result<(), DbError> {
+        self.conn.execute(
+            "UPDATE messages SET snapshot_id = ?1 WHERE message_id = ?2",
+            params![snapshot_id.0, message_id.0],
+        )?;
+        Ok(())
+    }
+
+    /// Load snapshots for a conversation ordered newest-first (for rewind).
+    pub fn list_snapshots(
+        &self,
+        conversation_id: &ConversationId,
+    ) -> Result<Vec<Snapshot>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT snapshot_id, conversation_id, message_id, tool_call_id, tool_name, snapshotted_at \
+             FROM snapshots WHERE conversation_id = ?1 ORDER BY snapshotted_at DESC",
+        )?;
+        let rows = stmt.query_map(params![conversation_id.0], |row| {
+            use chrono::DateTime;
+            let snapshotted_at_str: String = row.get(5)?;
+            Ok(Snapshot {
+                snapshot_id: SnapshotId(row.get(0)?),
+                conversation_id: ConversationId(row.get(1)?),
+                message_id: MessageId(row.get(2)?),
+                tool_call_id: row.get(3)?,
+                tool_name: row.get(4)?,
+                snapshotted_at: DateTime::parse_from_rfc3339(&snapshotted_at_str)
+                    .map(|d| d.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            })
+        })?;
+        rows.map(|r| r.map_err(DbError::from)).collect()
+    }
+
+    /// Load snapshots for a conversation from a given message's timestamp forward
+    /// (i.e., all snapshots at or after the rewind point), newest-first.
+    pub fn list_snapshots_from_message(
+        &self,
+        conversation_id: &ConversationId,
+        from_message_id: &MessageId,
+    ) -> Result<Vec<Snapshot>, DbError> {
+        // Find the `created_at` of the from_message.
+        let from_created: Option<String> = self.conn.query_row(
+            "SELECT created_at FROM messages WHERE message_id = ?1",
+            params![from_message_id.0],
+            |row| row.get(0),
+        ).optional()?;
+
+        let from_created = match from_created {
+            Some(t) => t,
+            None => return Ok(vec![]),
+        };
+
+        let mut stmt = self.conn.prepare(
+            "SELECT snapshot_id, conversation_id, message_id, tool_call_id, tool_name, snapshotted_at \
+             FROM snapshots WHERE conversation_id = ?1 AND snapshotted_at >= ?2 \
+             ORDER BY snapshotted_at DESC",
+        )?;
+        let rows = stmt.query_map(params![conversation_id.0, from_created], |row| {
+            use chrono::DateTime;
+            let snapshotted_at_str: String = row.get(5)?;
+            Ok(Snapshot {
+                snapshot_id: SnapshotId(row.get(0)?),
+                conversation_id: ConversationId(row.get(1)?),
+                message_id: MessageId(row.get(2)?),
+                tool_call_id: row.get(3)?,
+                tool_name: row.get(4)?,
+                snapshotted_at: DateTime::parse_from_rfc3339(&snapshotted_at_str)
+                    .map(|d| d.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            })
+        })?;
+        rows.map(|r| r.map_err(DbError::from)).collect()
+    }
+
+    /// Delete a snapshot row and its file entries (CASCADE in schema).
+    pub fn delete_snapshot(&self, snapshot_id: &SnapshotId) -> Result<(), DbError> {
+        self.conn.execute(
+            "DELETE FROM snapshots WHERE snapshot_id = ?1",
+            params![snapshot_id.0],
+        )?;
+        Ok(())
+    }
+
+    /// Truncate messages after (not including) `from_message_id` in a conversation.
+    /// Deletes messages whose `parent_id` chain leads through `from_message_id` —
+    /// simpler implementation: delete all messages created after `from_message_id`.
+    pub fn truncate_messages_after(
+        &mut self,
+        conversation_id: &ConversationId,
+        from_message_id: &MessageId,
+    ) -> Result<(), DbError> {
+        // Get created_at of from_message.
+        let from_created: String = self.conn.query_row(
+            "SELECT created_at FROM messages WHERE message_id = ?1",
+            params![from_message_id.0],
+            |row| row.get(0),
+        )?;
+
+        self.conn.execute(
+            "DELETE FROM messages WHERE conversation_id = ?1 AND created_at > ?2",
+            params![conversation_id.0, from_created],
+        )?;
+
+        // Update active_branch_message_id to point to from_message.
+        self.touch_conversation(conversation_id, Some(from_message_id))?;
+
+        Ok(())
+    }
+}
+
 // Extension trait to make `optional()` available on single-value queries.
 trait OptionalExt<T> {
     fn optional(self) -> rusqlite::Result<Option<T>>;
@@ -379,6 +544,104 @@ mod tests {
             list[0].active_branch_message_id.as_ref().unwrap().0,
             msg.message_id.0,
             "active_branch_message_id should be the last appended message"
+        );
+    }
+
+    #[test]
+    fn insert_and_list_snapshot() {
+        use crate::types::{SnapshotFile, SnapshotId};
+
+        let mut db = Database::open_in_memory().unwrap();
+        let ws = db.upsert_workspace("/tmp/snap_test").unwrap();
+        let conv = db.create_conversation(&ws, "SnapConv", "claude-opus-4-7").unwrap();
+        let msg = db
+            .append_message(
+                &conv.conversation_id,
+                None,
+                MessageRole::User,
+                "",
+                &[ContentBlock::Text { text: "edit file".into() }],
+                &[],
+                &[],
+                None,
+            )
+            .unwrap();
+
+        let files = vec![SnapshotFile {
+            snapshot_id: SnapshotId::new(), // will be overwritten by insert_snapshot
+            abs_path: "/tmp/snap_test/hello.txt".to_string(),
+            snapshot_filename: Some("path__tmp__snap_test__hello.txt.bak".to_string()),
+            pre_sha256: Some("abc123".to_string()),
+            pre_size_bytes: Some(11),
+            pre_existed: true,
+        }];
+
+        let snap_id = db
+            .insert_snapshot(
+                &conv.conversation_id,
+                &msg.message_id,
+                "tc_001",
+                "write_file",
+                &files,
+            )
+            .unwrap();
+
+        let snaps = db.list_snapshots(&conv.conversation_id).unwrap();
+        assert_eq!(snaps.len(), 1);
+        assert_eq!(snaps[0].snapshot_id.0, snap_id.0);
+        assert_eq!(snaps[0].tool_name, "write_file");
+    }
+
+    #[test]
+    fn truncate_messages_after_removes_later_messages() {
+        let mut db = Database::open_in_memory().unwrap();
+        let ws = db.upsert_workspace("/tmp/truncate_test").unwrap();
+        let conv = db.create_conversation(&ws, "TruncConv", "claude-opus-4-7").unwrap();
+
+        let m1 = db
+            .append_message(
+                &conv.conversation_id,
+                None,
+                MessageRole::User,
+                "",
+                &[ContentBlock::Text { text: "msg1".into() }],
+                &[],
+                &[],
+                None,
+            )
+            .unwrap();
+
+        // Small sleep to ensure distinct created_at timestamps.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+
+        let _m2 = db
+            .append_message(
+                &conv.conversation_id,
+                Some(&m1.message_id),
+                MessageRole::Assistant,
+                "claude-opus-4-7",
+                &[ContentBlock::Text { text: "msg2".into() }],
+                &[],
+                &[],
+                None,
+            )
+            .unwrap();
+
+        let msgs_before = db.list_messages(&conv.conversation_id).unwrap();
+        assert_eq!(msgs_before.len(), 2);
+
+        db.truncate_messages_after(&conv.conversation_id, &m1.message_id)
+            .unwrap();
+
+        let msgs_after = db.list_messages(&conv.conversation_id).unwrap();
+        assert_eq!(msgs_after.len(), 1, "only m1 should remain after truncation");
+        assert_eq!(msgs_after[0].message_id.0, m1.message_id.0);
+
+        // active_branch_message_id should point to m1.
+        let convs = db.list_conversations(&ws).unwrap();
+        assert_eq!(
+            convs[0].active_branch_message_id.as_ref().unwrap().0,
+            m1.message_id.0
         );
     }
 }

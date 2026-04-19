@@ -91,16 +91,45 @@ export interface E003_PtyOpenFailed extends BaseErrorPayload {
   recovery: { kind: 'dismiss_only' };
 }
 
-// (Variants for E004–E006, E008–E018 are added by their owning phases.
-//  Use the same pattern: extend BaseErrorPayload with a literal `code`
-//  and the specific i18n key + recovery type.)
+// Phase 6b — E008–E011.
+export interface E008_WriteToolDenied extends BaseErrorPayload {
+  code: 'E008';
+  messageKey: 'errors.E008.msg';
+  interpolations: { path: string };
+  recovery: { kind: 'dismiss_only' };
+}
+
+export interface E009_ShellForbiddenPrefix extends BaseErrorPayload {
+  code: 'E009';
+  messageKey: 'errors.E009.msg';
+  interpolations: { command: string };
+  recovery: { kind: 'dismiss_only' };
+}
+
+export interface E010_SnapshotFailed extends BaseErrorPayload {
+  code: 'E010';
+  messageKey: 'errors.E010.msg';
+  interpolations: { path: string };
+  recovery: { kind: 'dismiss_only' };
+}
+
+export interface E011_RewindFailed extends BaseErrorPayload {
+  code: 'E011';
+  messageKey: 'errors.E011.msg';
+  interpolations: { path: string };
+  recovery: { kind: 'dismiss_only' };
+}
 
 /** The discriminated union the toast accepts. */
 export type AppErrorPayload =
   | E001_KeyringMissing
   | E002_OutsideWorkspace
   | E003_PtyOpenFailed
-  | E007_GemmaVersionFallback;
+  | E007_GemmaVersionFallback
+  | E008_WriteToolDenied
+  | E009_ShellForbiddenPrefix
+  | E010_SnapshotFailed
+  | E011_RewindFailed;
 // Add more here as phases register their codes.
 
 /** Type guard: is this a known catalogued error? */

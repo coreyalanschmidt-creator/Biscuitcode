@@ -247,14 +247,48 @@ function MonacoPane({ tabId }: MonacoPaneProps) {
     return () => window.removeEventListener('biscuitcode:editor-reveal-line', handleReveal);
   }, [tab?.path]);
 
+  // Phase 6b: Ctrl+K Ctrl+I — inline AI edit on selection.
+  const ctrlKPending = useRef(false);
+
   const handleMount = useCallback(
     (editor: import('monaco-editor').editor.IStandaloneCodeEditor) => {
       editorRef.current = editor;
       editor.onDidChangeCursorPosition((e) => {
         if (tab) setCursorPosition(tab.id, e.position.lineNumber, e.position.column);
       });
+
+      // Ctrl+K sets a pending flag; Ctrl+I following it triggers inline edit.
+      if (monaco) {
+        editor.addCommand(
+          monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK,
+          () => { ctrlKPending.current = true; setTimeout(() => { ctrlKPending.current = false; }, 1000); },
+        );
+        editor.addCommand(
+          monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyI,
+          () => {
+            if (!ctrlKPending.current) return;
+            ctrlKPending.current = false;
+            const selection = editor.getSelection();
+            if (!selection || !tab) return;
+            const model = editor.getModel();
+            if (!model) return;
+            const selectedText = model.getValueInRange(selection);
+            if (!selectedText.trim()) return;
+            window.dispatchEvent(
+              new CustomEvent('biscuitcode:inline-edit-open', {
+                detail: {
+                  path: tab.path,
+                  startLine: selection.startLineNumber,
+                  endLine: selection.endLineNumber,
+                  selectedText,
+                },
+              }),
+            );
+          },
+        );
+      }
     },
-    [tabId],
+    [tabId, monaco, tab],
   );
 
   if (!tab) {

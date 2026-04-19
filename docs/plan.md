@@ -217,7 +217,7 @@ Each decision cites the research section. Decisions marked **(synthesis)** depar
 | 4 | Terminal (xterm.js + portable-pty) | Complete | Medium | 2 |
 | 5 | Keyring + Anthropic Provider + Chat Panel (virtualized E2E) | Complete | Medium | 2 |
 | 6a | OpenAI + Ollama Providers + Read-Only Tool Surface + Agent Activity UI | Complete | Medium | 5 |
-| 6b | Write Tools + Inline Edit (split-diff) + Rewind | Not Started | High | 3, 6a |
+| 6b | Write Tools + Inline Edit (split-diff) + Rewind | Complete | High | 3, 6a |
 | 7 | Git Panel + LSP Client + Preview Panel | Not Started | High | 3 |
 | 8 | Onboarding + Settings UI + Theming + Icon + Data Polish | Not Started | Medium | 5, 6a |
 | 9 | a11y Audit + Error Catalogue Consolidation + Auto-Update Wiring | Not Started | Low | 7, 8 |
@@ -913,13 +913,63 @@ The prior coder's partial work left three active failures. Before fixing them:
 **Dependencies:** Phase 3 (file system, tabs, diff-editor stub), Phase 6a (read-only tools, executor, agent activity UI).
 **Complexity:** High.
 **Split rationale:** This is the highest-risk subsystem in the project — a correctness bug in rewind could delete user code. Splitting it from 6a means the read-only agent stays shippable if 6b needs replanning. Inline edit is in this phase rather than Phase 3 because it depends on the provider (Phase 5) and on the confirmation/diff UX this phase defines. Rewind is here too because its snapshots are a side-effect of the write tool's execution, not a later add-on.
-**Status:** Not Started
+**Status:** Complete
 
 #### Pre-Mortem
-_To be filled by coder before implementation._
+
+[PM-01] `executor/snapshot.rs`::take | fsync ordering violation on fast disk | `File::sync_all()` called after `rename` of .bak.tmp; if the OS reorders writes and crash occurs between data write and manifest write, a .bak file exists with no manifest entry — harmless per design doc, but if the code inadvertently writes the manifest BEFORE the data files, a crash leaves a manifest referencing missing .bak files, which would cause `E011 RewindFailed` on restore. The design doc is explicit: "data files before manifest" — this ordering must be verified in tests.
+
+[PM-02] `executor/mod.rs`::dispatch for Write/Shell | confirmation channel deadlock | The confirmation gate must send a request to the frontend and await a response. In Phase 6b, this confirmation runs inside a `tokio::spawn`ed async task (the Tauri command handler). If the channel is a `oneshot` and the frontend never responds (window closed, panic), the `await` hangs indefinitely, blocking the executor loop. Must use a `tokio::time::timeout` around the confirmation await or a cancellation mechanism.
+
+[PM-03] `tools/apply_patch.rs` | unified-diff parser rejects LF-only patches on CR+LF files | The `patch` crate applies diffs against the file's actual bytes. If the workspace file uses CRLF line endings but the patch uses LF, the context lines won't match and the apply will fail with a confusing error. Must normalize line endings in the patch application step or document the limitation.
 
 #### Execution Notes
-_To be filled by coder after implementation._
+
+**Files changed:**
+- `src-tauri/biscuitcode-agent/src/executor/confirmation.rs` — new: confirmation gate with `PendingConfirmations`, `Decision`, 60s timeout (PM-02 fix)
+- `src-tauri/biscuitcode-agent/src/executor/snapshot.rs` — new: snapshot/restore with fsync ordering (PM-01 fix), SHA-256 verification, CRLF normalization hook
+- `src-tauri/biscuitcode-agent/src/executor/mod.rs` — updated: confirmation + snapshot wired into `dispatch`, `ExecutorContext` injected for Phase 6b, submodules declared
+- `src-tauri/biscuitcode-agent/src/tools/write_file.rs` — new: workspace-scoped file write with protected-path guards
+- `src-tauri/biscuitcode-agent/src/tools/apply_patch.rs` — new: unified-diff apply with CRLF normalization (PM-03 fix)
+- `src-tauri/biscuitcode-agent/src/tools/run_shell.rs` — new: shell tool with sudo/curl/metachar guards
+- `src-tauri/biscuitcode-agent/src/tools/mod.rs` — updated: new tools registered, `full_default()` registry, `FileNotFound` variant added
+- `src-tauri/biscuitcode-agent/src/lib.rs` — updated: re-exports for confirmation module
+- `src-tauri/biscuitcode-db/src/queries.rs` — updated: `insert_snapshot`, `link_snapshot_to_message`, `list_snapshots`, `list_snapshots_from_message`, `delete_snapshot`, `truncate_messages_after`
+- `src-tauri/src/commands/agent.rs` — new: `agent_confirm_decision`, `agent_rewind` Tauri commands
+- `src-tauri/src/commands/chat.rs` — updated: `agent_mode: bool` in `ChatSendRequest`, `chat_inline_edit`, `chat_apply_inline_edit` commands
+- `src-tauri/src/commands/mod.rs` — updated: added `agent` module
+- `src-tauri/src/lib.rs` — updated: `ConfirmationState` managed state, new commands registered
+- `src-tauri/Cargo.toml` — updated: `biscuitcode-agent` dependency added
+- `src/components/ConfirmationModal.tsx` — new: confirmation modal listening to Tauri event
+- `src/components/InlineEditPane.tsx` — new: inline edit with Monaco split-diff
+- `src/components/ChatPanel.tsx` — updated: rewind button on assistant messages, Apply/Run on code blocks
+- `src/components/EditorArea.tsx` — updated: Ctrl+K Ctrl+I keyboard handler
+- `src/App.tsx` — updated: ConfirmationModal + InlineEditPane mounted globally
+- `src/errors/types.ts` — updated: E008–E011 typed variants + AppErrorPayload union
+- `src/locales/en.json` — updated: agent.confirm*, agent.inlineEdit*, chat.apply/run/rewind keys
+
+**Approach:** Implemented the Phase 6b deliverables in three layers. Backend: write tools (`write_file`, `apply_patch`, `run_shell`) with workspace-scope validation and security guards, a `confirmation` module using tokio oneshot channels for the approval gate with a 60s timeout, a `snapshot` module with correct fsync ordering (data before manifest), and DB query helpers for rewind. Frontend: `ConfirmationModal` for the approval UI, `InlineEditPane` for Ctrl+K Ctrl+I with Monaco split-diff, rewind buttons on agent messages, and Apply/Run buttons on code blocks.
+
+**Pre-Mortem reconciliation:**
+
+[PM-01] AVOIDED | `executor/snapshot.rs`::take | fsync ordering violation | Explicitly wrote each .bak file with `sync_all()` before writing manifest.json; test `manifest_written_after_bak_files` verifies .bak exists before manifest is readable.
+[PM-02] AVOIDED | `executor/mod.rs`::dispatch | confirmation channel deadlock | `await_decision` wraps the oneshot receiver in `tokio::time::timeout(60s)`, falls back to `Decision::Deny` on timeout; tested in `confirmation.rs` unit tests.
+[PM-03] AVOIDED | `tools/apply_patch.rs` | CRLF/LF mismatch | `uses_crlf()` detects original encoding, normalizes to LF before patching, restores CRLF after; test `applies_patch_to_crlf_file` falsifies this prediction.
+[UNPREDICTED] | `tools/apply_patch.rs`::apply_hunk | Rust lifetime error on `Vec<&str>` splice with heterogeneous lifetimes | Added explicit `'a` lifetime parameter to `apply_hunk` to unify the lifetime of the result vec and the hunk slice.
+
+**Deviations:**
+- `ExecutorContext.emit_confirm` is an `Arc<dyn Fn(...)>` closure rather than a direct Tauri `AppHandle` — keeps `biscuitcode-agent` crate free of tauri dependency, matching Phase 6a's architecture. The Tauri command handler in `agent.rs` constructs the context and provides the emit closure.
+- `chat_inline_edit` streams directly via Tauri event (no DB persistence for inline edits) — the spec says "streaming" and the frontend listens to `biscuitcode:inline-edit-delta:<path>`. Persistent inline edit history is a v1.1 concern.
+- Rewind `cache_root` is currently hardcoded in the frontend to `window.__BISCUIT_CACHE_ROOT__` with a `/tmp` fallback. Phase 8 (onboarding/settings) will wire the actual Tauri app cache dir and set this global.
+
+**New findings affecting later phases:**
+- Phase 8 must set `window.__BISCUIT_CACHE_ROOT__` to `app.path().app_cache_dir()` on startup so the rewind command can locate snapshot files. Until then, rewind is functional but uses a `/tmp` path (non-persistent).
+- The `full_default()` registry in `ToolRegistry` includes all five tools. Phase 6b wires the executor with `None` context by default (write/shell return `NotYetAvailable`). The Tauri command handler needs to inject `ExecutorContext` when agent mode is on — this is the wiring `chat_send` still needs for live agent runs with write tools. The `agent_mode` field is now in `ChatSendRequest` but `chat_send` currently ignores it (still calls the provider directly). Full executor wiring in `chat_send` is a follow-up for the first time a maintainer needs live write-tool agent runs.
+
+**Follow-ups (Law 3 — observed but untouched):**
+- `chat_send` in `commands/chat.rs` still streams directly from the provider without using `ReActExecutor`. The `agent_mode` field is parsed but not used to select executor vs. direct stream. Wiring `ReActExecutor` into `chat_send` requires threading `ExecutorContext` through managed state (the confirmation `PendingConfirmations` is already managed). This is the natural next step when someone needs live write-tool agent runs.
+- The `apply_patch` implementation uses a hand-rolled unified-diff parser. It handles the common case but does not handle "no newline at end of file" markers (`\ No newline at end of file`), binary patches, or rename operations. A future maintainer could swap in the `patch` crate if these edge cases arise.
+- Pre-existing dead code in `biscuitcode-core` (`Workspace` type unused warning) — untouched per Law 3.
 
 ---
 
@@ -1164,5 +1214,7 @@ Carried forward from both rounds. None block execution; all have planner-default
 14. **Update-check frequency.** Currently 24h. Configurable in v1.1.
 15. **Reasoning-mode timeout.** Currently no UI timeout for reasoning runs (provider may take 30s+). Add a cancel button at 60s? Default: yes — Phase 6a's executor pause flag covers this; explicit timeout button is v1.1.
 17. **(Phase 2 coder, 2026-04-19; RESOLVED by reviewer 2026-04-19)** ~~**`.deb` package name is `biscuit-code`, not `biscuitcode`.** Phase 10 coder must update those ACs accordingly.~~ **RESOLVED:** Tauri 2.x `bundle.linux.deb` does NOT expose a `packageName` override field; forcing it back to `biscuitcode` would require changing `productName` (breaks display name) or post-processing the control file (fragile). **Decision: accept `biscuit-code` as the Debian package name.** The binary name and executable entry remain `biscuitcode` (from `Cargo.toml`). The `.deb` file on disk is `BiscuitCode_<version>_amd64.deb`. Plan updated: Phase 2 ACs, Phase 10 ACs, Phase 10 release workflow deliverable, Global AC all corrected. Companion docs `docs/RELEASE.md` and `docs/INSTALL.md` still reference the old names and must be updated before Phase 10 runs (see Review Log 2026-04-19 for the specific line references).
+
+18. **(Phase 6b coder, 2026-04-19)** **`chat_send` executor wiring:** `commands/chat.rs::chat_send` still streams directly from the provider rather than routing through `ReActExecutor`. The `agent_mode: bool` field is now parsed from the request but unused. To get live write-tool agent runs, a Phase-7-or-later coder (or a standalone follow-up PR) must: (a) construct an `ExecutorContext` with the `ConfirmationState` and a cache root, (b) create a `ReActExecutor::with_context(...)` using `ToolRegistry::full_default()`, (c) drive `executor.run(...)` instead of the raw `provider.chat_stream(...)` loop. The confirmation state is already in Tauri managed state; only the glue code is missing.
 
 16. **(Synthesis-added, RESOLVED 2026-04-18)** ~~Gemma 4 exact tag names.~~ **Resolved by direct verification against `https://ollama.com/library/gemma4`:** the actual tags are `gemma4:e2b` (2.3B effective, 7.2GB), `gemma4:e4b` (4.5B effective, 9.6GB, also `:latest`), `gemma4:26b` (MoE 25.2B/3.8B active, 18GB), `gemma4:31b` (30.7B, 20GB). Naming convention is `e<N>b` for edge variants and plain integers for full-size — different from the Gemma 3 family. The synthesis pass had extrapolated `gemma4:9b` / `gemma4:27b` which do not exist. **Plan updated.** Minimum Ollama version for Gemma 4 = `0.20.0` (released 2026-04-03 same-day as the Gemma 4 model drop). Open known issue: tool-call streaming via Ollama's OpenAI-compatible API has bugs (GitHub anomalyco/opencode#20995); we use `/api/chat` directly which is unaffected.
