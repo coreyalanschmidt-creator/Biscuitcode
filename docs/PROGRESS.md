@@ -1,17 +1,14 @@
-# Morning Brief — BiscuitCode autonomous overnight session
+# BiscuitCode Progress Log
 
-> Authored: 2026-04-18, autonomous Claude Code session.
-> Purpose: catch the maintainer up on what was done, what's next, and any decisions that need their input before code phases begin.
+> Living log of work done on this repo, in commit order. Updated as new commits land. Not a handoff document — `docs/plan.md` is the source of truth for what's done and what's next.
 
-## TL;DR
+## TL;DR (current state)
 
-Bootstrapped the C.Alan pipeline in this repo and ran a **2-round research + 2-round planning + 2-round review + synthesis** flow as you requested. Final source-of-truth is **`docs/plan.md`** (12 phases, ~16 working days). Pre-staged Phase 0 and Phase 1 file-only deliverables so when you're ready, `bash scripts/bootstrap-wsl.sh` from inside WSL2 starts the chain without you having to write the scripts yourself.
+Pipeline through synthesis is complete; `docs/plan.md` is the 12-phase source of truth. Phase 0 deliverables (bootstrap scripts, dev setup) are pre-staged. Phase 1 brand-locking source files are being authored as we go — these do not conflict with `pnpm create tauri-app` scaffold output. The Phase 1 coder will run `pnpm create tauri-app` on WSL2 and merge our brand files in.
 
-**Commit count this session:** **14 commits** on `main` (no remote, nothing pushed).
+The build/install/launch verification of any phase happens on WSL2. **Authoring source files from Windows is fine; building/running them from Windows is forbidden.**
 
-Pipeline: bootstrap → research-r1 → plan-r1 → review-r1 → research-r2 → plan-r2 → review-r2 → synthesis (plan.md + self-audit) → Phase 0/1 file-only deliverables → Q16 Gemma 4 verification → Phase 1/6a/8/10 file-only deliverables + Concept C/D fix → architectural design docs (PROVIDER-TRAIT, AGENT-LOOP, CAPABILITIES) + ERROR-CATALOGUE + RELEASE checklist + CLAUDE.md update.
-
-**Stop point:** before any source code that needs to compile. The plan and CLAUDE.md both forbid Windows-native builds — code phases must run from WSL2 + Ubuntu 24.04.
+**Pipeline run:** bootstrap → research-r1 → plan-r1 → review-r1 → research-r2 → plan-r2 → review-r2 → synthesis (plan.md + self-audit) → Phase 0/1 file-only deliverables → Q16 Gemma 4 verification → Phase 1/6a/8/10 file-only deliverables + Concept C/D fix → architectural design docs (PROVIDER-TRAIT, AGENT-LOOP, CAPABILITIES) + ERROR-CATALOGUE + RELEASE checklist + CLAUDE.md update → Phase 1 brand-locking source files.
 
 ## What's in the repo now
 
@@ -109,9 +106,9 @@ Things a fresh-context synthesizer would have caught that I might not have:
 - Same-context anchoring bias (I knew which agent said what — a fresh context wouldn't).
 - I worked from agent return summaries rather than re-reading research-r2 end-to-end during synthesis. If a specific research finding matters to you, spot-check `plan.md` against `research-r2.md` directly.
 
-## What's next — your move when you wake up
+## What's next
 
-### Immediate (next 15 minutes)
+### Immediate (when you have ~15 minutes)
 
 1. **Skim `docs/plan.md`** — especially the `## Synthesis Log` and the Phase Index. Sanity check it against your intent.
 2. **Spot-check `docs/research-r2.md`** if you want to verify any synthesis decision against the source research.
@@ -187,11 +184,8 @@ What I HAVE pre-staged is **architecture contracts and reference docs** the Phas
 - **The plan has 18 error codes scattered across 9 phases.** The Phase 9 error-catalogue audit will be tedious if any phase forgot to register a code. The CI gate (`tests/error-catalogue.spec.ts` enforces "every catalogued code has a passing trigger test") catches drift.
 - **Phase 6b is the riskiest phase in the plan.** Write tools + rewind + inline edit are tightly coupled; a correctness bug in rewind could delete user code. Plan's split (6a then 6b) means the read-only agent is shippable even if 6b needs replanning.
 
-## My state right now
+## Repo state
 
 - All work committed to `main` in `C:/Users/super/Documents/GitHub/BiscuitCode/`.
-- No remote configured — nothing pushed to GitHub yet (intentional; you decide).
-- I'm in a worktree of the Typing app (`C:\Users\super\Documents\GitHub\Typing app\.claude\worktrees\focused-borg-b456c8`) which is unrelated to BiscuitCode. Don't expect to find BiscuitCode work here.
-- Project memory will be saved next so future Claude Code sessions in any project know about BiscuitCode.
-
-Good luck. The plan is bulletproof on paper — the risks are all in execution, where Phase 6 (6a/6b) is the part to take slowly.
+- No remote configured — nothing pushed to GitHub yet (intentional; user decides when to push).
+- The Claude Code shell sits in a Typing-app worktree but every BiscuitCode write uses absolute paths to `C:/Users/super/Documents/GitHub/BiscuitCode/`. No cross-contamination.
