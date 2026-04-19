@@ -157,14 +157,31 @@
     "newChat": "New chat (Ctrl+Shift+L)",
     "emptyHint": "Type a message below to start chatting with Claude.",
     "inputLabel": "Chat message",
-    "inputPlaceholder": "Message Claude… (Enter to send, Shift+Enter for newline)",
-    "shortcutHint": "Ctrl+L — quote selection • Ctrl+Shift+L — new chat",
+    "inputPlaceholder": "Message Claude… (Enter to send, Shift+Enter for newline, @ to mention a file)",
+    "shortcutHint": "Ctrl+L — quote selection • Ctrl+Shift+L — new chat • @ — mention file",
     "sendButton": "Send",
     "sending": "Sending…",
     "noKeyBanner": "No Anthropic API key set. Go to Settings → Models to add one.",
     "errorNoKey": "No API key configured. Add one in Settings → Models.",
     "errorStream": "Stream error ({{code}}). Check your connection.",
-    "errorSend": "Failed to send message. Check your connection."
+    "errorSend": "Failed to send message. Check your connection.",
+    "agentMode": "Agent",
+    "agentModeLabel": "Agent mode",
+    "agentModeTitle": "Agent mode: the AI will automatically use tools to complete your request",
+    "mentionPickerLabel": "File mention picker",
+    "mentionNoResults": "No matching files"
+  },
+
+  "agent": {
+    "emptyHint": "No tool calls yet. Enable agent mode and send a message to see the AI work.",
+    "running": "running…",
+    "args": "Arguments",
+    "result": "Result",
+    "status": {
+      "running": "Running",
+      "ok": "Done",
+      "error": "Error"
+    }
   },
 
   "onboarding": {
