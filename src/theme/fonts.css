@@ -1,0 +1,75 @@
+/* src/theme/fonts.css
+ *
+ * Self-hosted font declarations — vision-mandated. NO Google Fonts CDN
+ * (would leak the user's IP to Google on every launch); NO `system-ui`
+ * fallback in primary chrome (CI grep test in Phase 10 fails if found).
+ *
+ * The .woff2 files live in `src-tauri/fonts/` and are referenced via
+ * Tauri's asset protocol (or copied to `public/fonts/` at build time
+ * — Phase 1 coder picks the cleaner path against the actual scaffold).
+ *
+ * Inter weights: 400 (Regular), 500 (Medium), 600 (SemiBold)
+ * JetBrains Mono weights: 400 (Regular), 500 (Medium); ligatures on
+ *
+ * Phase 1 coder MUST download the actual woff2 files from the official
+ * Google Fonts (Inter) and JetBrains (JetBrains Mono) repos before
+ * `pnpm tauri dev` will render text — these declarations point at paths
+ * that don't yet have files behind them.
+ *
+ * Suggested source URLs (verify license terms — both are SIL OFL,
+ * compatible with our MIT app):
+ *   Inter:           https://github.com/rsms/inter (download woff2 set)
+ *   JetBrains Mono:  https://www.jetbrains.com/lp/mono/ (download)
+ */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/Inter-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/Inter-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/Inter-SemiBold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  /* Ligatures default-on; Phase 1 settings exposes a toggle. */
+  font-feature-settings: 'liga' 1, 'calt' 1;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/JetBrainsMono-Medium.woff2') format('woff2');
+  font-feature-settings: 'liga' 1, 'calt' 1;
+}
+
+/* Font-load canary: a hidden offscreen span that the Phase 8 font-canary
+ * code measures. If the metrics match the Ubuntu fallback (= Inter didn't
+ * load), the catalogue toast E016 FontLoadFailed fires.
+ *
+ * Render this from React with:
+ *   <span style={{position:'absolute',visibility:'hidden',fontFamily:'Inter'}}
+ *         data-font-canary>BiscuitCode</span>
+ */

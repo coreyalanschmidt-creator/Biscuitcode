@@ -1,0 +1,30 @@
+# biscuitcode-core — shared primitives for the BiscuitCode app.
+#
+# Phase 1 deliverable. The Phase 1 coder may need to adjust:
+#   - Workspace path: this Cargo.toml assumes the standard
+#     `src-tauri/biscuitcode-core/Cargo.toml` layout with the parent
+#     `src-tauri/Cargo.toml` declaring `[workspace] members = ["biscuitcode-core"]`.
+#   - Dependency versions: pinned to known-good versions as of 2026-04;
+#     the coder runs `cargo update` once and verifies nothing surprising
+#     bumps to a new major version.
+
+[package]
+name = "biscuitcode-core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Shared primitives for BiscuitCode (palette + catalogued errors)."
+publish = false
+
+[dependencies]
+# Error enum derives. 1.0.x line is stable and unlikely to break.
+thiserror = "1.0"
+
+# Serde for the catalogued-error wire format (Tauri IPC + conversation
+# export schema). default-features off + derive feature is the conventional
+# small-footprint choice.
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
+
+[lib]
+name = "biscuitcode_core"
+path = "src/lib.rs"

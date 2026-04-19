@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "fs",
+  "description": "Filesystem access. Phase 1 baseline = config/data/cache dirs only. Phase 3 expands at runtime via FsScope::allow_directory(workspace_root) when a folder is opened. See docs/design/CAPABILITIES.md.",
+  "windows": ["main"],
+  "permissions": [
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [
+        { "path": "$APPCONFIG/**" },
+        { "path": "$APPDATA/**" },
+        { "path": "$APPCACHE/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [
+        { "path": "$APPCONFIG/**" },
+        { "path": "$APPDATA/**" },
+        { "path": "$APPCACHE/**" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "http",
+  "description": "HTTP fetch allowlist. Phase 1 baseline = empty. Phase 5 adds Anthropic. Phase 6a adds OpenAI + Ollama (localhost) + GitHub Releases for Phase 9 auto-update. NEVER add a wildcard host. See docs/design/CAPABILITIES.md.",
+  "windows": ["main"],
+  "permissions": []
+}

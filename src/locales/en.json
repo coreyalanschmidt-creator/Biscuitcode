@@ -1,0 +1,122 @@
+{
+  "_meta": {
+    "language": "en",
+    "schema_version": 1,
+    "comment": "BiscuitCode i18n bundle, English. Source of truth for every user-facing string. CI test (Phase 2 + 9) asserts every t('key') lookup in src/ resolves here. Add new keys at the bottom of each section as phases register them. Do NOT remove keys after they ship — translation effort would be wasted."
+  },
+
+  "common": {
+    "appName": "BiscuitCode",
+    "tagline": "An AI coding environment, served warm.",
+    "ok": "OK",
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "dismiss": "Dismiss",
+    "close": "Close",
+    "save": "Save",
+    "open": "Open",
+    "copyCommand": "Copy command",
+    "openSettings": "Open Settings"
+  },
+
+  "shortcuts": {
+    "registered_placeholder": "{{shortcut}} registered; wiring lands in Phase {{phase}}"
+  },
+
+  "panels": {
+    "sidePanel": "Side Panel",
+    "bottomPanel": "Bottom Panel",
+    "chatPanel": "Chat Panel",
+    "activityBar": "Activity Bar",
+    "statusBar": "Status Bar",
+    "files": "Files",
+    "search": "Search",
+    "git": "Git",
+    "chats": "Chats",
+    "settings": "Settings",
+    "terminal": "Terminal",
+    "agentActivity": "Agent Activity",
+    "problems": "Problems",
+    "output": "Output"
+  },
+
+  "errors": {
+    "E001": {
+      "msg": "BiscuitCode needs a system keyring to store API keys safely. Install gnome-keyring with the command below."
+    },
+    "E002": {
+      "msg": "BiscuitCode can't access files outside your workspace folder ({{path}}). Open a different workspace if you need to work with that file."
+    },
+    "E003": {
+      "msg": "Couldn't open a new terminal. Reason: {{reason}}. Try closing other terminals."
+    },
+    "E004": {
+      "msg": "Your Anthropic API key was rejected. Check the key in Settings → Models."
+    },
+    "E005": {
+      "msg": "Couldn't reach Anthropic. Check your connection."
+    },
+    "E006": {
+      "msg": "Anthropic is rate-limiting your requests. Try again in {{retry_after_seconds}} seconds."
+    },
+    "E007": {
+      "msg": "Gemma 4 isn't available on your Ollama version. Using Gemma 3 instead. Run the command below to upgrade Ollama and access Gemma 4."
+    },
+    "E008": {
+      "msg": "You declined the write to {{path}}. The agent's run was paused."
+    },
+    "E009": {
+      "msg": "BiscuitCode blocked the shell command `{{command}}` for safety. The agent's run was paused."
+    },
+    "E010": {
+      "msg": "Couldn't save an undo point for {{path}}. The write was NOT performed. Free disk space or check file permissions."
+    },
+    "E011": {
+      "msg": "Can't undo this step — the saved version of {{path}} is missing or corrupted."
+    },
+    "E012": {
+      "msg": "Git push failed: {{git_stderr}}. Check the Terminal panel for full output."
+    },
+    "E013": {
+      "msg": "The {{language}} language server isn't installed. Install with the command below."
+    },
+    "E014": {
+      "msg": "The {{language}} language server crashed. Code intelligence is disabled for this language until you restart BiscuitCode."
+    },
+    "E015": {
+      "msg": "Couldn't render preview for {{file}}. Reason: {{reason}}."
+    },
+    "E016": {
+      "msg": "BiscuitCode's bundled fonts didn't load. Falling back to system fonts. Re-installing the .deb usually fixes this."
+    },
+    "E017": {
+      "msg": "Couldn't check for updates. Check your connection."
+    },
+    "E018": {
+      "msg": "Couldn't download the update: {{reason}}. Try again later or download manually from the releases page."
+    }
+  },
+
+  "onboarding": {
+    "welcome": {
+      "title": "Welcome to BiscuitCode",
+      "subtitle": "Let's get you coding in under two minutes.",
+      "next": "Next"
+    },
+    "pickModels": {
+      "title": "Pick your AI models",
+      "subtitle": "Add at least one provider to continue. You can change this anytime in Settings.",
+      "anthropic": "Anthropic (Claude)",
+      "openai": "OpenAI (ChatGPT)",
+      "ollama": "Ollama (local models — Gemma 4, Qwen, more)",
+      "addKey": "Add API key",
+      "installOllama": "Install Ollama"
+    },
+    "openFolder": {
+      "title": "Open a folder",
+      "subtitle": "BiscuitCode works best with a project folder open. You can also continue without one.",
+      "openButton": "Open folder…",
+      "skipButton": "Continue without a folder"
+    }
+  }
+}
