@@ -68,6 +68,28 @@ To partially compensate, this self-audit applies the same five-axis reviewer cri
 
 **Files modified by self-audit:** Phase 3 ACs (multi-cursor, minimap); Phase 6a "agent mode on" AC (concrete prompt + tool sequence); Open Questions (Q16 added); Global AC reference to test fixture path. Synthesis Log itself (this section).
 
+### 2026-04-18 — Post-Synthesis Corrections (icon reference + Gemma 4 verification)
+
+After the synthesis pass, the maintainer attached two reference files that triggered corrections to in-progress assumptions. Recorded here so the audit trail captures *why* the plan changed after synthesis "completed."
+
+**Q16 RESOLVED** — verified Gemma 4 tags against `https://ollama.com/library/gemma4`:
+- Real tags: `gemma4:e2b` (2.3B effective, 7.2GB), `gemma4:e4b` (4.5B effective, 9.6GB, =`:latest`), `gemma4:26b` (MoE 25.2B/3.8B active, 18GB), `gemma4:31b` (30.7B, 20GB).
+- Synthesis had extrapolated `gemma4:9b` and `gemma4:27b` which DO NOT EXIST. Naming convention is `e<N>b` for edge variants and plain integers for full-size — different from Gemma 3.
+- All Gemma 4 variants natively support function calling (no fine-tunes needed).
+- Minimum Ollama version: `0.20.0` (released same-day as Gemma 4, 2026-04-03).
+- Plan updated: Architecture Decisions, Assumption #7, Phase 6a deliverables (RAM-tier table), Phase 6a ACs, Global AC, Open Question Q16 marked RESOLVED. Commit `d68b1e1`.
+
+**Icon Concept C/D naming correction** — maintainer attached `biscuitcode-icon-concepts.html` (now committed at `packaging/icons/biscuitcode-icon-concepts.html`). The reference file is the authoritative design source and contains exactly THREE concepts:
+- **Concept A — "The Prompt"** (`>_` glyph on rounded square) — recommended; ships in v1
+- **Concept B — "The Braces"** (`{·}` with center dot) — NOT in scope
+- **Concept C — "The Biscuit"** (literal biscuit shape with `>_` glyph at center) — alternative if A fails the 16x16 legibility check
+
+There is **no Concept D**. The vision text and r1/r2 both refer to the biscuit-shape alternative as "Concept D" — that label is wrong in source documents. Treat all "Concept D" references as meaning the same biscuit-shape, which is officially **Concept C** in the reference. Plan updated: Assumption #22, Phase 8 icon deliverable + AC, Open Question Q3.
+
+**SVG correction**: the master `packaging/icons/biscuitcode.svg` was originally authored from the vision's text description (a filled-wedge chevron with a wide underscore below). The reference HTML reveals the official Concept A is structurally different — a *polyline-stroke* chevron with rounded line-caps, and a small underscore *to the right* of the chevron vertex (not below). The master SVG has been replaced with the verbatim extraction from the reference HTML's hero `<svg>` block. Future icon edits should be made in the reference HTML first, then re-extracted.
+
+**Files modified by post-synthesis corrections:** `docs/plan.md` (this Synthesis Log + Assumption #7 + Assumption #22 + Architecture Decisions Ollama defaults + Phase 6a deliverables/ACs + Phase 8 icon deliverable/AC + Global AC + Open Questions Q3/Q16); `docs/MORNING-BRIEF.md` (Q16 status + icon naming note); `packaging/icons/biscuitcode.svg` (replaced with extracted Concept A); new file `packaging/icons/biscuitcode-icon-concepts.html` (authoritative design reference).
+
 ---
 
 ## Vision Summary
@@ -104,7 +126,7 @@ Carried from both research rounds plus planning-specific assumptions. Confidence
 19. **[MED]** Inline edit UX is **Zed-style split-diff** via `monaco.editor.createDiffEditor`. Whole-diff Accept/Reject in v1; per-hunk in v1.1. (r2 D7)
 20. **[MED]** i18n scaffolding is in scope for v1 (all user-facing strings wrapped in `t('key')`; English-only bundle). Cost ≈ 1 hour in Phase 2. (r2 G1)
 21. **[MED]** Accessibility is "reasonable posture" in v1: keyboard-only navigation, ARIA labels on icon buttons, `aria-live="polite"` on streaming chat, focus rings. Full WCAG AA is post-v1. (r2 G2)
-22. **[MED]** Icon Concept A ("The Prompt") ships in v1. A 16x16 render legibility check happens inside Phase 9 before the icon is declared done; Concept D is deferred unless A fails the legibility test.
+22. **[MED]** Icon Concept A ("The Prompt") ships in v1. A 16x16 render legibility check happens inside Phase 8 before the icon is declared done; **Concept C ("The Biscuit")** is deferred unless A fails the legibility test. **Note:** the vision text refers to the biscuit-shape alternative as "Concept D" but the authoritative reference (`packaging/icons/biscuitcode-icon-concepts.html`) labels it **Concept C** — there is no Concept D. Treat r1/r2 references to "Concept D" as referring to the biscuit-shape Concept C.
 23. **[MED]** Telemetry is scaffolded as an off-by-default setting in v1 with no wire implementation — endpoint choice is a v1.1 decision (Open Question).
 24. **[MED]** Notebook preview is read-only render in v1 (per vision); execution deferred to v2.
 25. **[LOW]** Arm64 is NOT a v1 target. `.deb` ships x86_64 only.
@@ -612,8 +634,9 @@ _To be filled by coder after implementation._
 - **Settings page** (`SettingsPage.tsx`) with sections: General, Editor, Models, Terminal, Appearance, Security, Conversations, About. Raw JSON editor button opens `~/.config/biscuitcode/settings.json` in the Monaco editor for power-users.
 - **Three themes:** `BiscuitCode Warm` (dark, default), `BiscuitCode Cream` (light), `High Contrast`. Each defined as CSS variable overrides in `src/theme/themes.ts`. Live preview on hover in Appearance pane.
 - **GTK theme detection at startup:** Rust `detect_gtk_theme()` via `xfconf-query -c xsettings -p /Net/ThemeName`, fallback `gsettings get org.gnome.desktop.interface gtk-theme`. Regex `-dark$` (case-insensitive) → dark; otherwise light. On first run with a light GTK theme, offer to switch to Cream.
-- **Icon:** `packaging/icons/biscuitcode.svg` authored as **Concept A** — biscuit-gold `>_` glyph on cocoa-dark rounded-square (#1C1610, 22% corner radius). Render with `rsvg-convert` to `biscuitcode-{16,32,48,64,128,256,512}.png`. `.ico` for Windows future.
-- **16x16 render verification:** CI step asserts `biscuitcode-16.png` pixel-level legibility — at least 2 distinct pixels forming a `>` shape and 3 pixels for `_`. Visual diff against a checked-in reference. **If the check fails, switch to Concept D ("The Biscuit") and re-test.**
+- **Icon:** `packaging/icons/biscuitcode.svg` is the master file — **Concept A "The Prompt"** extracted verbatim from the authoritative reference `packaging/icons/biscuitcode-icon-concepts.html`. Render with `rsvg-convert -w SIZE -h SIZE biscuitcode.svg -o biscuitcode-SIZE.png` for SIZE in `{16, 32, 48, 64, 128, 256, 512}`. For the 16px raster, **prefer the hand-tuned 16px variant inline in the reference HTML** (stroke-width 72, corner radius 96) over a downscale of the master — the reference HTML provides per-size hand-tuning so glyph stroke weight stays legible at tray size.
+- **`.ico` for Windows future**: ImageMagick `convert biscuitcode-16.png biscuitcode-32.png biscuitcode-48.png biscuitcode-256.png biscuitcode.ico`.
+- **16x16 render verification:** CI step asserts `biscuitcode-16.png` pixel-level legibility — at least 2 distinct pixels forming a `>` shape and 3 pixels for `_`. Visual diff against a checked-in reference. **If the check fails, switch to Concept C ("The Biscuit")** — also extractable from the reference HTML — and re-test.
 - **Conversation branching UI:** edit a past user message → fork; tree view in conversation header showing branches with parent pointers (DB schema already supports via `parent_id`). Switching branches loads the alternate message chain.
 - **Conversation export/import:** Settings → Conversations → "Export all" produces `biscuitcode-conversations-<date>.json` (full DAG); "Import" merges a previously-exported file (skipping duplicates by `(conversation_id, message_id)`).
 - **Snapshot cleanup:** background task deletes `~/.cache/biscuitcode/snapshots/<conv>/...` directories whose conversations have been deleted OR whose snapshots are > 30 days old AND the conversation is closed. Setting under Conversations to disable.
@@ -773,7 +796,7 @@ Carried forward from both rounds. None block execution; all have planner-default
 
 1. **Telemetry backend.** Vision allows opt-in anonymous crashes. Wire Sentry (vendor dep), self-hosted endpoint, or ship UI toggle in v1 with no wire (current default)?
 2. **AppImage `libfuse2t64` UX.** README banner only, or also an AppImage wrapper script that prompts install? Current default: both.
-3. **Icon Concept D spike.** Plan ships A; CI 16x16 check decides whether to fall back to D. Should we render both upfront and pick? Default: trust A, fall back to D only if check fails.
+3. **Icon Concept C spike.** Plan ships **Concept A**; CI 16x16 check decides whether to fall back to **Concept C ("The Biscuit")**. Vision text said "Concept D" but the authoritative `packaging/icons/biscuitcode-icon-concepts.html` reference labels the biscuit-shape alternative as **Concept C** (no Concept D exists). Should we render both upfront and pick? Default: trust A, fall back to C only if 16x16 check fails. Reference HTML also has a Concept B ("The Braces") which is NOT in scope.
 4. **Arm64 build.** v1 = x86_64 only. Defer arm64 to v1.1? Default: defer.
 5. **Debian repo (`apt.biscuitcode.io`).** GitHub releases only in v1; apt repo deferred.
 6. **Secret Service auto-recovery.** Block onboarding with install prompt vs. attempt `gnome-keyring-daemon --replace` ourselves? Default: be conservative — block.

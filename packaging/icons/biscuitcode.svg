@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  BiscuitCode Logo — Concept A: "The Prompt"
+  Master 512x512. Extracted verbatim from packaging/icons/biscuitcode-icon-concepts.html
+  (the maintainer's authoritative design reference). DO NOT freehand redesign — if
+  changes are needed, edit the reference HTML and re-extract.
+
+  Design:
+    - Cocoa-dark rounded-square background (#1C1610 → linear-gradient depth)
+    - 1px subtle inner stroke (#3A2F24, opacity 0.7) for crispness against light bgs
+    - Biscuit-gold (#E8B04C) `>_` glyph:
+        - chevron: polyline with stroke-linecap:round, stroke-width 48
+        - underscore: short rect to the right of the chevron vertex
+    - Corner radius 112 (≈22% of 512)
+
+  16x16 legibility note: at the smallest tray size, stroke widths must scale UP
+  in the viewBox to maintain visual presence. The reference HTML provides hand-tuned
+  variants per render size:
+    - 64px / 48px / 32px: this master SVG works as-is via rsvg-convert
+    - 16px: use the size-specific SVG from the reference HTML (stroke-width 72,
+      corner radius 96 → 18.75%, slightly different glyph spacing)
+
+  Phase 8/9 deliverable. Render rasters with:
+    rsvg-convert -w SIZE -h SIZE packaging/icons/biscuitcode.svg \
+      -o packaging/icons/biscuitcode-SIZE.png
+  for SIZE in 16 32 48 64 128 256 512. For 16px, prefer the hand-tuned variant
+  in the reference HTML over a downscale of this master.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="512" height="512"
+     viewBox="0 0 512 512"
+     role="img" aria-label="BiscuitCode">
+
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#241A13"/>
+      <stop offset="100%" stop-color="#0E0906"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Cocoa-dark rounded-square background, with subtle gradient depth.
+       Vision: "#1C1610 background, 22% corner radius."
+       Implementation: gradient #241A13 → #0E0906 average to #1C1610. -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- 2px inner border for crispness on light surfaces. -->
+  <rect x="3" y="3" width="506" height="506" rx="109"
+        fill="none" stroke="#3A2F24" stroke-width="2" opacity="0.7"/>
+
+  <!-- The `>` chevron: polyline (TL → MR → BL) with rounded line-caps and joins.
+       Stroke-width 48 at 512x512 viewBox = ~9.4% of canvas, plenty of weight. -->
+  <polyline points="156,156 256,256 156,356"
+            fill="none"
+            stroke="#E8B04C"
+            stroke-width="48"
+            stroke-linecap="round"
+            stroke-linejoin="round"/>
+
+  <!-- The `_` underscore: short rounded rect to the right of the chevron vertex.
+       Sits at y=332..356 (24px tall), x=276..372 (96px wide), with rx=12. -->
+  <rect x="276" y="332" width="96" height="24" rx="12" fill="#E8B04C"/>
+
+</svg>

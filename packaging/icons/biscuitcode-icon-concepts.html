@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BiscuitCode Icon Concepts</title>
+<style>
+  :root {
+    --biscuit-300: #F0C065;
+    --biscuit-400: #EBB553;
+    --biscuit-500: #E8B04C;
+    --biscuit-600: #C7913A;
+    --biscuit-700: #9E722A;
+    --cocoa-50:    #F6F0E8;
+    --cocoa-100:   #E0D3BE;
+    --cocoa-200:   #B9A582;
+    --cocoa-300:   #8A7658;
+    --cocoa-400:   #584938;
+    --cocoa-500:   #3A2F24;
+    --cocoa-600:   #28201A;
+    --cocoa-700:   #1C1610;
+    --cocoa-800:   #120D08;
+    --cocoa-900:   #080504;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: var(--cocoa-900);
+    color: var(--cocoa-100);
+    line-height: 1.5;
+    padding: 48px 32px;
+  }
+  .container { max-width: 1280px; margin: 0 auto; }
+  header { margin-bottom: 48px; }
+  h1 {
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+    color: var(--cocoa-50);
+  }
+  h1 .accent { color: var(--biscuit-500); }
+  .subtitle { color: var(--cocoa-200); font-size: 15px; max-width: 720px; }
+  .intro-note {
+    background: var(--cocoa-700);
+    border: 1px solid var(--cocoa-500);
+    border-left: 3px solid var(--biscuit-500);
+    padding: 16px 20px;
+    border-radius: 6px;
+    margin-top: 24px;
+    font-size: 14px;
+    color: var(--cocoa-100);
+  }
+  .intro-note strong { color: var(--biscuit-400); }
+  .intro-note code {
+    font-family: 'SF Mono', Menlo, monospace;
+    font-size: 12px;
+    background: var(--cocoa-900);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--biscuit-300);
+  }
+
+  .concepts {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+    margin-bottom: 48px;
+  }
+  @media (max-width: 1080px) {
+    .concepts { grid-template-columns: 1fr; }
+  }
+
+  .concept {
+    background: var(--cocoa-700);
+    border: 1px solid var(--cocoa-500);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .concept.recommended {
+    border-color: var(--biscuit-600);
+    box-shadow: 0 0 0 1px var(--biscuit-700);
+  }
+  .concept.thematic {
+    border-color: var(--cocoa-400);
+  }
+  .concept-header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--cocoa-500);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .concept-title {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--cocoa-50);
+  }
+  .concept-subtitle {
+    font-size: 13px;
+    color: var(--cocoa-200);
+    margin-top: 2px;
+  }
+  .concept-subtitle code {
+    font-family: 'SF Mono', Menlo, monospace;
+    color: var(--biscuit-300);
+  }
+  .badge {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--cocoa-900);
+    background: var(--biscuit-500);
+    padding: 3px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .badge.alt {
+    background: var(--cocoa-300);
+    color: var(--cocoa-900);
+  }
+  .hero-icon {
+    padding: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at center, var(--cocoa-600) 0%, var(--cocoa-700) 70%);
+    border-bottom: 1px solid var(--cocoa-500);
+  }
+  .hero-icon svg { width: 180px; height: 180px; filter: drop-shadow(0 8px 24px rgba(0,0,0,0.5)); }
+
+  .size-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    gap: 16px;
+  }
+  .size-row.on-dark { background: var(--cocoa-900); }
+  .size-row.on-light { background: var(--cocoa-100); }
+  .size-row .label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--cocoa-300);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+  .size-row.on-light .label { color: var(--cocoa-500); }
+  .size-stack {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    flex: 1;
+    justify-content: flex-end;
+  }
+  .size-item { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .size-item .px {
+    font-size: 10px;
+    color: var(--cocoa-300);
+    font-family: 'SF Mono', Menlo, monospace;
+  }
+  .size-row.on-light .size-item .px { color: var(--cocoa-500); }
+
+  .notes {
+    padding: 20px 24px;
+    border-top: 1px solid var(--cocoa-500);
+    font-size: 13px;
+    color: var(--cocoa-100);
+  }
+  .notes h4 {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--biscuit-400);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .notes p { margin-bottom: 10px; }
+  .notes p:last-child { margin-bottom: 0; }
+  .notes code {
+    font-family: 'SF Mono', Menlo, monospace;
+    font-size: 12px;
+    background: var(--cocoa-900);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--biscuit-300);
+  }
+
+  .how-to-use {
+    background: var(--cocoa-700);
+    border: 1px solid var(--cocoa-500);
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin-top: 24px;
+  }
+  .how-to-use h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    letter-spacing: -0.01em;
+    color: var(--cocoa-50);
+  }
+  .how-to-use ol { padding-left: 24px; }
+  .how-to-use li { margin-bottom: 8px; color: var(--cocoa-100); font-size: 14px; }
+  .how-to-use li strong { color: var(--biscuit-400); }
+  .how-to-use code {
+    font-family: 'SF Mono', Menlo, monospace;
+    font-size: 12px;
+    background: var(--cocoa-900);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--biscuit-300);
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>BiscuitCode Icon Concepts <span class="accent">— Design Reference</span></h1>
+    <p class="subtitle">Three directions for the BiscuitCode application icon. Each is shown at multiple sizes on dark and light backgrounds to verify legibility down to 16×16 (system tray size). Brand colors are locked: biscuit-gold <code style="font-family:'SF Mono',Menlo,monospace;color:var(--biscuit-300);background:var(--cocoa-900);padding:2px 6px;border-radius:3px;font-size:12px;">#E8B04C</code> on cocoa-dark <code style="font-family:'SF Mono',Menlo,monospace;color:var(--biscuit-300);background:var(--cocoa-900);padding:2px 6px;border-radius:3px;font-size:12px;">#1C1610</code>.</p>
+    <div class="intro-note">
+      <strong>Primary recommendation: Concept A ("The Prompt")</strong> — the <code>&gt;_</code> glyph reads instantly as a developer tool, scales cleanly to 16px, and sits comfortably in a launcher grid alongside VS Code, Warp, Zed, and Cursor without copying any of them. <br><br><strong>Strong alternative: Concept C ("The Biscuit")</strong> — leans into the name with a literal biscuit-shape carrying the <code>&gt;_</code> glyph. More ownable and memorable, slightly more playful. Either is a defensible choice.
+    </div>
+  </header>
+
+  <div class="concepts">
+
+    <!-- ===================== CONCEPT A: THE PROMPT ===================== -->
+    <div class="concept recommended">
+      <div class="concept-header">
+        <div>
+          <div class="concept-title">Concept A · The Prompt</div>
+          <div class="concept-subtitle"><code>&gt;_</code> terminal glyph on rounded square</div>
+        </div>
+        <span class="badge">Recommended</span>
+      </div>
+      <div class="hero-icon">
+        <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="bgA1" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#241A13"/>
+              <stop offset="100%" stop-color="#0E0906"/>
+            </linearGradient>
+          </defs>
+          <rect width="512" height="512" rx="112" fill="url(#bgA1)"/>
+          <rect x="3" y="3" width="506" height="506" rx="109" fill="none" stroke="#3A2F24" stroke-width="2" opacity="0.7"/>
+          <polyline points="156,156 256,256 156,356" fill="none" stroke="#E8B04C" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="276" y="332" width="96" height="24" rx="12" fill="#E8B04C"/>
+        </svg>
+      </div>
+
+      <div class="size-row on-dark">
+        <span class="label">On Dark</span>
+        <div class="size-stack">
+          <div class="size-item"><svg width="64" height="64" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#1C1610"/><polyline points="156,156 256,256 156,356" fill="none" stroke="#E8B04C" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/><rect x="276" y="332" width="96" height="24" rx="12" fill="#E8B04C"/></svg><span class="px">64px</span></div>
+          <div class="size-item"><svg width="48" height="48" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#1C1610"/><polyline points="156,156 256,256 156,356" fill="none" stroke="#E8B04C" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/><rect x="276" y="332" width="96" height="28" rx="14" fill="#E8B04C"/></svg><span class="px">48px</span></div>
+          <div class="size-item"><svg width="32" height="32" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#1C1610"/><polyline points="156,156 256,256 156,356" fill="none" stroke="#E8B04C" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/><rect x="276" y="332" width="96" height="32" rx="16" fill="#E8B04C"/></svg><span class="px">32px</span></div>
+          <div class="size-item"><svg width="16" height="16" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#1C1610"/><polyline points="160,160 256,256 160,352" fill="none" stroke="#E8B04C" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"/><rect x="272" y="320" width="104" height="40" rx="20" fill="#E8B04C"/></svg><span class="px">16px</span></div>
+        </div>
+      </div>
+
+      <div class="size-row on-light">
+        <span class="label">On Light</span>
+        <div class="size-stack">
+          <div class="size-item"><svg width="64" height="64" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#1C1610"/><polyline points="156,156 256,256 156,356" fill="none" stroke="#E8B04C" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/><rect x="276" y="332" width="96" height="24" rx="12" fill="#E8B04C"/></svg><span class="px">64px</span></div>
+          <div class="size-item"><svg width="48" height="48" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#1C1610"/><polyline points="156,156 256,256 156,356" fill="none" stroke="#E8B04C" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/><rect x="276" y="332" width="96" height="28" rx="14" fill="#E8B04C"/></svg><span class="px">48px</span></div>
+          <div class="size-item"><svg width="32" height="32" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#1C1610"/><polyline points="156,156 256,256 156,356" fill="none" stroke="#E8B04C" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/><rect x="276" y="332" width="96" height="32" rx="16" fill="#E8B04C"/></svg><span class="px">32px</span></div>
+          <div class="size-item"><svg width="16" height="16" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#1C1610"/><polyline points="160,160 256,256 160,352" fill="none" stroke="#E8B04C" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"/><rect x="272" y="320" width="104" height="40" rx="20" fill="#E8B04C"/></svg><span class="px">16px</span></div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <h4>Design Notes</h4>
+        <p><strong>Glyph:</strong> chevron <code>&gt;</code> + underscore <code>_</code>. Reads universally as "terminal prompt" / "developer tool."</p>
+        <p><strong>Construction:</strong> chevron is a <code>polyline</code> with <code>stroke-linecap:round</code>; stroke weight scales up at smaller sizes (48px → 72px in viewBox) to maintain visual presence. Corner radius also scales down (22% → 18.75%) so the rounded square doesn't become a circle at 16px.</p>
+        <p><strong>Why it works:</strong> professional silhouette, legible at every size, ownable, uses brand tokens verbatim. Safe pick — this is what launcher-grid peers expect.</p>
+      </div>
+    </div>
+
+    <!-- ===================== CONCEPT B: THE BRACES ===================== -->
+    <div class="concept">
+      <div class="concept-header">
+        <div>
+          <div class="concept-title">Concept B · The Braces</div>
+          <div class="concept-subtitle"><code>{·}</code> with biscuit-gold dot</div>
+        </div>
+      </div>
+      <div class="hero-icon">
+        <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="bgB1" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#241A13"/>
+              <stop offset="100%" stop-color="#0E0906"/>
+            </linearGradient>
+          </defs>
+          <rect width="512" height="512" rx="112" fill="url(#bgB1)"/>
+          <rect x="3" y="3" width="506" height="506" rx="109" fill="none" stroke="#3A2F24" stroke-width="2" opacity="0.7"/>
+          <path d="M 208 140 C 170 140 170 172 170 204 L 170 240 C 170 256 160 256 144 256 C 160 256 170 256 170 272 L 170 308 C 170 340 170 372 208 372"
+                fill="none" stroke="#E8B04C" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M 304 140 C 342 140 342 172 342 204 L 342 240 C 342 256 352 256 368 256 C 352 256 342 256 342 272 L 342 308 C 342 340 342 372 304 372"
+                fill="none" stroke="#E8B04C" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="256" cy="256" r="20" fill="#E8B04C"/>
+        </svg>
+      </div>
+
+      <div class="size-row on-dark">
+        <span class="label">On Dark</span>
+        <div class="size-stack">
+          <div class="size-item"><svg width="64" height="64" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#1C1610"/><path d="M 208 140 C 170 140 170 172 170 204 L 170 240 C 170 256 160 256 144 256 C 160 256 170 256 170 272 L 170 308 C 170 340 170 372 208 372" fill="none" stroke="#E8B04C" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/><path d="M 304 140 C 342 140 342 172 342 204 L 342 240 C 342 256 352 256 368 256 C 352 256 342 256 342 272 L 342 308 C 342 340 342 372 304 372" fill="none" stroke="#E8B04C" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/><circle cx="256" cy="256" r="20" fill="#E8B04C"/></svg><span class="px">64px</span></div>
+          <div class="size-item"><svg width="48" height="48" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#1C1610"/><path d="M 208 140 C 170 140 170 172 170 204 L 170 240 C 170 256 160 256 144 256 C 160 256 170 256 170 272 L 170 308 C 170 340 170 372 208 372" fill="none" stroke="#E8B04C" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/><path d="M 304 140 C 342 140 342 172 342 204 L 342 240 C 342 256 352 256 368 256 C 352 256 342 256 342 272 L 342 308 C 342 340 342 372 304 372" fill="none" stroke="#E8B04C" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/><circle cx="256" cy="256" r="24" fill="#E8B04C"/></svg><span class="px">48px</span></div>
+          <div class="size-item"><svg width="32" height="32" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#1C1610"/><path d="M 208 140 C 170 140 170 172 170 204 L 170 240 C 170 256 160 256 144 256 C 160 256 170 256 170 272 L 170 308 C 170 340 170 372 208 372" fill="none" stroke="#E8B04C" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/><path d="M 304 140 C 342 140 342 172 342 204 L 342 240 C 342 256 352 256 368 256 C 352 256 342 256 342 272 L 342 308 C 342 340 342 372 304 372" fill="none" stroke="#E8B04C" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/><circle cx="256" cy="256" r="28" fill="#E8B04C"/></svg><span class="px">32px</span></div>
+          <div class="size-item"><svg width="16" height="16" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#1C1610"/><path d="M 196 140 C 156 140 156 172 156 204 L 156 234 C 156 256 144 256 128 256 C 144 256 156 256 156 278 L 156 308 C 156 340 156 372 196 372" fill="none" stroke="#E8B04C" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"/><path d="M 316 140 C 356 140 356 172 356 204 L 356 234 C 356 256 368 256 384 256 C 368 256 356 256 356 278 L 356 308 C 356 340 356 372 316 372" fill="none" stroke="#E8B04C" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"/><circle cx="256" cy="256" r="40" fill="#E8B04C"/></svg><span class="px">16px</span></div>
+        </div>
+      </div>
+
+      <div class="size-row on-light">
+        <span class="label">On Light</span>
+        <div class="size-stack">
+          <div class="size-item"><svg width="64" height="64" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#1C1610"/><path d="M 208 140 C 170 140 170 172 170 204 L 170 240 C 170 256 160 256 144 256 C 160 256 170 256 170 272 L 170 308 C 170 340 170 372 208 372" fill="none" stroke="#E8B04C" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/><path d="M 304 140 C 342 140 342 172 342 204 L 342 240 C 342 256 352 256 368 256 C 352 256 342 256 342 272 L 342 308 C 342 340 342 372 304 372" fill="none" stroke="#E8B04C" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/><circle cx="256" cy="256" r="20" fill="#E8B04C"/></svg><span class="px">64px</span></div>
+          <div class="size-item"><svg width="48" height="48" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#1C1610"/><path d="M 208 140 C 170 140 170 172 170 204 L 170 240 C 170 256 160 256 144 256 C 160 256 170 256 170 272 L 170 308 C 170 340 170 372 208 372" fill="none" stroke="#E8B04C" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/><path d="M 304 140 C 342 140 342 172 342 204 L 342 240 C 342 256 352 256 368 256 C 352 256 342 256 342 272 L 342 308 C 342 340 342 372 304 372" fill="none" stroke="#E8B04C" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/><circle cx="256" cy="256" r="24" fill="#E8B04C"/></svg><span class="px">48px</span></div>
+          <div class="size-item"><svg width="32" height="32" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#1C1610"/><path d="M 208 140 C 170 140 170 172 170 204 L 170 240 C 170 256 160 256 144 256 C 160 256 170 256 170 272 L 170 308 C 170 340 170 372 208 372" fill="none" stroke="#E8B04C" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/><path d="M 304 140 C 342 140 342 172 342 204 L 342 240 C 342 256 352 256 368 256 C 352 256 342 256 342 272 L 342 308 C 342 340 342 372 304 372" fill="none" stroke="#E8B04C" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/><circle cx="256" cy="256" r="28" fill="#E8B04C"/></svg><span class="px">32px</span></div>
+          <div class="size-item"><svg width="16" height="16" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#1C1610"/><path d="M 196 140 C 156 140 156 172 156 204 L 156 234 C 156 256 144 256 128 256 C 144 256 156 256 156 278 L 156 308 C 156 340 156 372 196 372" fill="none" stroke="#E8B04C" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"/><path d="M 316 140 C 356 140 356 172 356 204 L 356 234 C 356 256 368 256 384 256 C 368 256 356 256 356 278 L 356 308 C 356 340 356 372 316 372" fill="none" stroke="#E8B04C" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"/><circle cx="256" cy="256" r="40" fill="#E8B04C"/></svg><span class="px">16px</span></div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <h4>Design Notes</h4>
+        <p><strong>Glyph:</strong> curly braces <code>{ }</code> wrapping a solid biscuit-gold dot — "code block containing a value."</p>
+        <p><strong>Trade-off:</strong> universally legible as "code" but less ownable — many projects use braces. The dot in the middle is the differentiating element.</p>
+        <p><strong>16px caveat:</strong> braces get spindly below 24px. Stroke weight is bumped aggressively at the smallest sizes. Concept A is more robust at tray sizes.</p>
+      </div>
+    </div>
+
+    <!-- ===================== CONCEPT C: THE BISCUIT ===================== -->
+    <div class="concept thematic">
+      <div class="concept-header">
+        <div>
+          <div class="concept-title">Concept C · The Biscuit</div>
+          <div class="concept-subtitle">Literal biscuit-shape carrying the <code>&gt;_</code> glyph</div>
+        </div>
+        <span class="badge alt">Thematic</span>
+      </div>
+      <div class="hero-icon">
+        <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="biscuitFace" cx="50%" cy="38%" r="65%">
+              <stop offset="0%" stop-color="#F0C065"/>
+              <stop offset="55%" stop-color="#E8B04C"/>
+              <stop offset="100%" stop-color="#9E722A"/>
+            </radialGradient>
+          </defs>
+          <!-- biscuit body with baked radial depth -->
+          <circle cx="256" cy="256" r="232" fill="url(#biscuitFace)"/>
+          <!-- darker baked outer edge -->
+          <circle cx="256" cy="256" r="232" fill="none" stroke="#5E4318" stroke-width="6" opacity="0.5"/>
+          <!-- digestive-biscuit pricks, 12 positions around r=170 -->
+          <g fill="#3E2B0F" opacity="0.55">
+            <circle cx="426" cy="256" r="8"/>
+            <circle cx="403" cy="341" r="8"/>
+            <circle cx="341" cy="403" r="8"/>
+            <circle cx="256" cy="426" r="8"/>
+            <circle cx="171" cy="403" r="8"/>
+            <circle cx="109" cy="341" r="8"/>
+            <circle cx="86" cy="256" r="8"/>
+            <circle cx="109" cy="171" r="8"/>
+            <circle cx="171" cy="109" r="8"/>
+            <circle cx="256" cy="86" r="8"/>
+            <circle cx="341" cy="109" r="8"/>
+            <circle cx="403" cy="171" r="8"/>
+          </g>
+          <!-- code glyph: >_ in deep cocoa for contrast -->
+          <polyline points="176,196 256,256 176,316" fill="none" stroke="#1C1610" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="272" y="296" width="80" height="22" rx="11" fill="#1C1610"/>
+        </svg>
+      </div>
+
+      <div class="size-row on-dark">
+        <span class="label">On Dark</span>
+        <div class="size-stack">
+          <div class="size-item"><svg width="64" height="64" viewBox="0 0 512 512"><circle cx="256" cy="256" r="232" fill="url(#biscuitFace64)"/><defs><radialGradient id="biscuitFace64" cx="50%" cy="38%" r="65%"><stop offset="0%" stop-color="#F0C065"/><stop offset="55%" stop-color="#E8B04C"/><stop offset="100%" stop-color="#9E722A"/></radialGradient></defs><g fill="#3E2B0F" opacity="0.55"><circle cx="426" cy="256" r="10"/><circle cx="403" cy="341" r="10"/><circle cx="341" cy="403" r="10"/><circle cx="256" cy="426" r="10"/><circle cx="171" cy="403" r="10"/><circle cx="109" cy="341" r="10"/><circle cx="86" cy="256" r="10"/><circle cx="109" cy="171" r="10"/><circle cx="171" cy="109" r="10"/><circle cx="256" cy="86" r="10"/><circle cx="341" cy="109" r="10"/><circle cx="403" cy="171" r="10"/></g><polyline points="176,196 256,256 176,316" fill="none" stroke="#1C1610" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/><rect x="272" y="296" width="80" height="24" rx="12" fill="#1C1610"/></svg><span class="px">64px</span></div>
+          <div class="size-item"><svg width="48" height="48" viewBox="0 0 512 512"><defs><radialGradient id="biscuitFace48" cx="50%" cy="38%" r="65%"><stop offset="0%" stop-color="#F0C065"/><stop offset="55%" stop-color="#E8B04C"/><stop offset="100%" stop-color="#9E722A"/></radialGradient></defs><circle cx="256" cy="256" r="232" fill="url(#biscuitFace48)"/><polyline points="176,196 256,256 176,316" fill="none" stroke="#1C1610" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/><rect x="272" y="292" width="84" height="28" rx="14" fill="#1C1610"/></svg><span class="px">48px</span></div>
+          <div class="size-item"><svg width="32" height="32" viewBox="0 0 512 512"><defs><radialGradient id="biscuitFace32" cx="50%" cy="38%" r="65%"><stop offset="0%" stop-color="#F0C065"/><stop offset="55%" stop-color="#E8B04C"/><stop offset="100%" stop-color="#9E722A"/></radialGradient></defs><circle cx="256" cy="256" r="232" fill="url(#biscuitFace32)"/><polyline points="172,192 256,256 172,320" fill="none" stroke="#1C1610" stroke-width="60" stroke-linecap="round" stroke-linejoin="round"/><rect x="272" y="288" width="84" height="36" rx="18" fill="#1C1610"/></svg><span class="px">32px</span></div>
+          <div class="size-item"><svg width="16" height="16" viewBox="0 0 512 512"><defs><radialGradient id="biscuitFace16" cx="50%" cy="38%" r="65%"><stop offset="0%" stop-color="#F0C065"/><stop offset="55%" stop-color="#E8B04C"/><stop offset="100%" stop-color="#9E722A"/></radialGradient></defs><circle cx="256" cy="256" r="240" fill="url(#biscuitFace16)"/><polyline points="168,176 256,256 168,336" fill="none" stroke="#1C1610" stroke-width="76" stroke-linecap="round" stroke-linejoin="round"/><rect x="272" y="280" width="96" height="48" rx="24" fill="#1C1610"/></svg><span class="px">16px</span></div>
+        </div>
+      </div>
+
+      <div class="size-row on-light">
+        <span class="label">On Light</span>
+        <div class="size-stack">
+          <div class="size-item"><svg width="64" height="64" viewBox="0 0 512 512"><defs><radialGradient id="biscuitFaceL64" cx="50%" cy="38%" r="65%"><stop offset="0%" stop-color="#F0C065"/><stop offset="55%" stop-color="#E8B04C"/><stop offset="100%" stop-color="#9E722A"/></radialGradient></defs><circle cx="256" cy="256" r="232" fill="url(#biscuitFaceL64)"/><circle cx="256" cy="256" r="232" fill="none" stroke="#5E4318" stroke-width="6" opacity="0.5"/><g fill="#3E2B0F" opacity="0.55"><circle cx="426" cy="256" r="10"/><circle cx="403" cy="341" r="10"/><circle cx="341" cy="403" r="10"/><circle cx="256" cy="426" r="10"/><circle cx="171" cy="403" r="10"/><circle cx="109" cy="341" r="10"/><circle cx="86" cy="256" r="10"/><circle cx="109" cy="171" r="10"/><circle cx="171" cy="109" r="10"/><circle cx="256" cy="86" r="10"/><circle cx="341" cy="109" r="10"/><circle cx="403" cy="171" r="10"/></g><polyline points="176,196 256,256 176,316" fill="none" stroke="#1C1610" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/><rect x="272" y="296" width="80" height="24" rx="12" fill="#1C1610"/></svg><span class="px">64px</span></div>
+          <div class="size-item"><svg width="48" height="48" viewBox="0 0 512 512"><defs><radialGradient id="biscuitFaceL48" cx="50%" cy="38%" r="65%"><stop offset="0%" stop-color="#F0C065"/><stop offset="55%" stop-color="#E8B04C"/><stop offset="100%" stop-color="#9E722A"/></radialGradient></defs><circle cx="256" cy="256" r="232" fill="url(#biscuitFaceL48)"/><circle cx="256" cy="256" r="232" fill="none" stroke="#5E4318" stroke-width="6" opacity="0.5"/><polyline points="176,196 256,256 176,316" fill="none" stroke="#1C1610" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/><rect x="272" y="292" width="84" height="28" rx="14" fill="#1C1610"/></svg><span class="px">48px</span></div>
+          <div class="size-item"><svg width="32" height="32" viewBox="0 0 512 512"><defs><radialGradient id="biscuitFaceL32" cx="50%" cy="38%" r="65%"><stop offset="0%" stop-color="#F0C065"/><stop offset="55%" stop-color="#E8B04C"/><stop offset="100%" stop-color="#9E722A"/></radialGradient></defs><circle cx="256" cy="256" r="232" fill="url(#biscuitFaceL32)"/><polyline points="172,192 256,256 172,320" fill="none" stroke="#1C1610" stroke-width="60" stroke-linecap="round" stroke-linejoin="round"/><rect x="272" y="288" width="84" height="36" rx="18" fill="#1C1610"/></svg><span class="px">32px</span></div>
+          <div class="size-item"><svg width="16" height="16" viewBox="0 0 512 512"><defs><radialGradient id="biscuitFaceL16" cx="50%" cy="38%" r="65%"><stop offset="0%" stop-color="#F0C065"/><stop offset="55%" stop-color="#E8B04C"/><stop offset="100%" stop-color="#9E722A"/></radialGradient></defs><circle cx="256" cy="256" r="240" fill="url(#biscuitFaceL16)"/><polyline points="168,176 256,256 168,336" fill="none" stroke="#1C1610" stroke-width="76" stroke-linecap="round" stroke-linejoin="round"/><rect x="272" y="280" width="96" height="48" rx="24" fill="#1C1610"/></svg><span class="px">16px</span></div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <h4>Design Notes</h4>
+        <p><strong>Glyph:</strong> round biscuit shape with a radial-gradient "baked" face, darker outer edge, twelve perimeter pricks (digestive-biscuit style), and the <code>&gt;_</code> prompt in deep cocoa at the center.</p>
+        <p><strong>Why it works:</strong> maximum ownability — no other dev tool looks like a biscuit. Memorable in a launcher grid (the round silhouette breaks up a row of rounded squares). Thematic without being cutesy.</p>
+        <p><strong>Scaling strategy:</strong> pricks and baked edge stroke are decorative — rendered at 128px and above, dropped at 64px and below to avoid noise. At 16px, only the biscuit face + chunky <code>&gt;_</code> glyph remain.</p>
+        <p><strong>Trade-off:</strong> slightly more "indie / playful" than Concept A. Excellent fit for BiscuitCode specifically, less of a generic professional statement.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="how-to-use">
+    <h2>How to use this file with Claude Code</h2>
+    <ol>
+      <li><strong>Pick a concept.</strong> Open this file in a browser to evaluate at real pixel sizes. The 16px preview is the make-or-break size — it must stay legible in the XFCE system tray.</li>
+      <li><strong>Attach to Claude Code.</strong> Drag this HTML into the chat when you start the build, alongside the super prompt. Say: <em>"Use Concept A as the icon master"</em> — or <em>"Use Concept C"</em> if you want the thematic biscuit. Render to SVG and all required PNG sizes for the <code>.deb</code> package.</li>
+      <li><strong>Let Claude Code extract the SVG.</strong> The hero SVGs inline in this file are production-ready — Claude Code can lift the chosen one directly into <code>packaging/icons/biscuitcode.svg</code> and rasterize the PNG set via <code>rsvg-convert</code>.</li>
+      <li><strong>Override anything.</strong> E.g., <em>"Use Concept C but make the pricks slightly larger"</em> or <em>"Use Concept A but make the underscore shorter and closer to the chevron."</em> Claude Code will adjust the SVG directly.</li>
+    </ol>
+  </div>
+</div>
+
+</body>
+</html>

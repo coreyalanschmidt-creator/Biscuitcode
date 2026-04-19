@@ -7,7 +7,7 @@
 
 Bootstrapped the C.Alan pipeline in this repo and ran a **2-round research + 2-round planning + 2-round review + synthesis** flow as you requested. Final source-of-truth is **`docs/plan.md`** (12 phases, ~16 working days). Pre-staged Phase 0 and Phase 1 file-only deliverables so when you're ready, `bash scripts/bootstrap-wsl.sh` from inside WSL2 starts the chain without you having to write the scripts yourself.
 
-**Commit count this session:** 9 commits on `main` (no remote, nothing pushed).
+**Commit count this session:** 11+ commits on `main` (no remote, nothing pushed). Initial 9 covered the C.Alan pipeline through synthesis + the first round of pre-staged Phase 0/1 deliverables; subsequent commits resolved Q16 (Gemma 4 tag verification), corrected the icon Concept C/D naming, and pre-staged additional Phase 1/6a/8/10 file-only artifacts (LICENSE, real Concept A SVG, reference HTML, CI workflow skeleton, canonical tool prompt fixture, conversation export schema).
 
 **Stop point:** before any source code that needs to compile. The plan and CLAUDE.md both forbid Windows-native builds — code phases must run from WSL2 + Ubuntu 24.04.
 
@@ -15,27 +15,36 @@ Bootstrapped the C.Alan pipeline in this repo and ran a **2-round research + 2-r
 
 ```
 BiscuitCode/
-├── CLAUDE.md                       # Project operating system + Four Laws
-├── README.md                       # Starter readme
-├── .gitignore                      # Tauri / Rust / Node / pnpm / OS / paranoia
-├── .gitattributes                  # (was here from initial commit)
+├── CLAUDE.md                                # Project operating system + Four Laws
+├── README.md                                # Starter readme
+├── LICENSE                                  # MIT (Phase 1 deliverable)
+├── .gitignore                               # Tauri / Rust / Node / pnpm / OS / paranoia
+├── .gitattributes                           # (was here from initial commit)
 ├── .claude/
 │   ├── agents/{researcher,planner,reviewer,coder}.md
 │   └── commands/{research,plan,review-plan,run-phase,run-all}.md
+├── .github/workflows/
+│   └── ci.yml                               # Phase 1 skeleton; populated through Phase 10
 ├── docs/
-│   ├── vision.md                   # Super prompt v3, locked
-│   ├── research-r1.md              # Round 1 research (~600 lines)
-│   ├── research-r2.md              # Round 2 research (~650 lines, challenger)
-│   ├── plan-r1.md                  # Round 1 plan + reviewer-r1 audit
-│   ├── plan-r2.md                  # Round 2 plan + reviewer-r2 audit
-│   ├── plan.md                     # ★ FINAL synthesized plan (source of truth)
-│   ├── DEV-SETUP.md                # WSL2 + toolchain setup procedure
-│   ├── MORNING-BRIEF.md            # This file
+│   ├── vision.md                            # Super prompt v3, locked
+│   ├── research-r1.md                       # Round 1 research (~600 lines)
+│   ├── research-r2.md                       # Round 2 research (~650 lines, challenger)
+│   ├── plan-r1.md                           # Round 1 plan + reviewer-r1 audit
+│   ├── plan-r2.md                           # Round 2 plan + reviewer-r2 audit
+│   ├── plan.md                              # ★ FINAL synthesized plan (source of truth)
+│   ├── DEV-SETUP.md                         # WSL2 + toolchain setup procedure
+│   ├── CONVERSATION-EXPORT-SCHEMA.md        # Phase 8 deliverable
+│   ├── MORNING-BRIEF.md                     # This file
 │   └── adr/
-│       └── 0001-no-stronghold.md   # Why we don't use tauri-plugin-stronghold
-└── scripts/
-    ├── bootstrap-wsl.sh            # Phase 0 — apt installs (system libs)
-    └── bootstrap-toolchain.sh      # Phase 0 — rustup, nvm, node, pnpm, cargo-tauri
+│       └── 0001-no-stronghold.md            # Why we don't use tauri-plugin-stronghold
+├── scripts/
+│   ├── bootstrap-wsl.sh                     # Phase 0 — apt installs (system libs)
+│   └── bootstrap-toolchain.sh               # Phase 0 — rustup, nvm, node, pnpm, cargo-tauri
+├── packaging/icons/
+│   ├── biscuitcode.svg                      # Concept A master (verbatim from reference HTML)
+│   └── biscuitcode-icon-concepts.html       # Authoritative design reference (A/B/C)
+└── tests/fixtures/
+    └── canonical-tool-prompt.md             # Phase 6a tool-card-render gate fixture
 ```
 
 ## What happened, in order
@@ -141,7 +150,9 @@ Things a fresh-context synthesizer would have caught that I might not have:
 
 ### Open Questions you may want to answer before Phase 6a
 
-These are in `docs/plan.md → ## Open Questions`. Q16 (Gemma 4 tag names) the coder must resolve at execution. Others (Q1 telemetry backend, Q3 icon Concept D spike, Q4 arm64) only matter for v1.0 finalization (Phases 9–10).
+These are in `docs/plan.md → ## Open Questions`. Q16 (Gemma 4 tag names) was **resolved post-briefing** by direct verification against `ollama.com/library/gemma4` — see commit `d68b1e1`. Others (Q1 telemetry backend, Q3 icon Concept C spike, Q4 arm64) only matter for v1.0 finalization (Phases 8–10).
+
+**Icon naming correction (post-brief):** the vision text refers to the biscuit-shape alternative as "Concept D" but the authoritative reference (`packaging/icons/biscuitcode-icon-concepts.html`, now in the repo) labels it **Concept C** — there is no Concept D. r1/r2 say "Concept D" — those references all mean the same biscuit-shape Concept C. plan.md has been updated.
 
 ## Risks I want to flag
 
