@@ -1,0 +1,50 @@
+# biscuitcode-agent — ReAct executor + tool registry + snapshot/rewind.
+#
+# Phase 6a creates the crate with read-only tools (`read_file`,
+# `search_code`) + the executor + Agent Activity instrumentation.
+# Phase 6b adds write tools (`write_file`, `apply_patch`, `run_shell`)
+# + confirmation gate + per-action snapshot + rewind.
+#
+# Design contract: docs/design/AGENT-LOOP.md.
+
+[package]
+name = "biscuitcode-agent"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "ReAct agent loop, tool registry, and snapshot/rewind for BiscuitCode."
+publish = false
+
+[dependencies]
+biscuitcode-core      = { path = "../biscuitcode-core" }
+biscuitcode-providers = { path = "../biscuitcode-providers" }
+biscuitcode-db        = { path = "../biscuitcode-db" }
+
+# Async + streams
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs"] }
+futures = "0.3"
+
+# Tool args + JSON Schema
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Glob matching for search_code's `glob` arg + workspace-trust path matching.
+globset = "0.4"
+ignore  = "0.4"     # respects .gitignore for search_code workspace walks
+
+# SHA-256 for snapshot manifest hashes (Phase 6b).
+sha2 = "0.10"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Errors
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+
+[lib]
+name = "biscuitcode_agent"
+path = "src/lib.rs"

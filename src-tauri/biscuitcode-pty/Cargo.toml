@@ -1,0 +1,43 @@
+# biscuitcode-pty — multi-tab PTY backend for the integrated terminal.
+#
+# Phase 4 deliverable. Wraps `portable-pty` so each xterm.js tab in the
+# frontend has a corresponding PTY child process; data flows in both
+# directions via Tauri events keyed by SessionId.
+#
+# Design contract: docs/plan.md Phase 4 deliverables. Two Tokio tasks per
+# session (reader/writer), keyed by SessionId, drained on tab close.
+
+[package]
+name = "biscuitcode-pty"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Multi-tab PTY backend (portable-pty + Tokio) for BiscuitCode."
+publish = false
+
+[dependencies]
+biscuitcode-core = { path = "../biscuitcode-core" }
+
+# The PTY wrapper. portable-pty 0.8+ exposes the platform-PTY surface
+# (Linux openpty, BSD posix_openpt, Windows ConPTY) under one trait.
+portable-pty = "0.8"
+
+# Async + sync primitives
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "io-util"] }
+
+# Concurrent session map
+parking_lot = "0.12"
+
+# IDs (PTY session ids are simple sortable ULIDs)
+ulid = { version = "1", features = ["serde"] }
+
+# Errors + serialization
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+
+[lib]
+name = "biscuitcode_pty"
+path = "src/lib.rs"
