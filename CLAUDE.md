@@ -112,6 +112,19 @@ A coder invoked from Windows cannot satisfy Phase 1+ acceptance criteria. If the
 - Tauri allowlist: minimum-scope. No `shell.open` with arbitrary URLs. No `fs` outside workspace + config dirs.
 - Telemetry off by default. If on, anonymous crashes only — no prompt content, file contents, or responses.
 
+### Architecture Decision Records (ADRs)
+
+Decisions that future maintainers need to be warned away from re-litigating live in `docs/adr/`. Read these before searching the web for "how to do X in Tauri":
+
+- **`docs/adr/0001-no-stronghold.md`** — `tauri-plugin-stronghold` is deprecated and will be removed in Tauri v3. The `keyring` crate is the only forward-compatible secrets path. A web search for "Tauri secrets" will mislead.
+
+### Resolved post-synthesis (2026-04-18)
+
+Two corrections landed AFTER `docs/plan.md` was first written. Both are recorded in the plan's `## Synthesis Log`:
+
+- **Q16 RESOLVED** — Gemma 4 tags verified against `https://ollama.com/library/gemma4`. Real tags are `gemma4:e2b` (2.3B effective, 7.2GB), `gemma4:e4b` (4.5B effective, 9.6GB, also `:latest`), `gemma4:26b` (MoE 25.2B/3.8B active, 18GB), `gemma4:31b` (30.7B, 20GB). Min Ollama version: `0.20.0`. All Gemma 4 variants natively support function calling.
+- **Icon Concept naming** — `packaging/icons/biscuitcode-icon-concepts.html` is the authoritative reference and contains exactly THREE concepts: A ("The Prompt"), B ("The Braces"), C ("The Biscuit"). Vision text and r1/r2 say "Concept D" — that label is wrong. Treat all "Concept D" references as meaning the biscuit-shape **Concept C**.
+
 ### Success signals
 
 - Diffs touch only files the current phase named.
@@ -119,3 +132,26 @@ A coder invoked from Windows cannot satisfy Phase 1+ acceptance criteria. If the
 - Rewrites from over-engineering are rare.
 - `plan.md` phases small enough a single coder session finishes cleanly.
 - `.deb` installs cleanly on fresh Mint 22 XFCE VM; uninstalls cleanly via `apt remove biscuitcode`.
+
+### Pre-staged artifacts (authored before Phase 0)
+
+These exist in the repo before Phase 0 runs. Coders **read and possibly edit** them; they are NOT marked Complete in `plan.md` until the relevant phase's coder verifies them.
+
+| File | Phase | Purpose |
+|---|---|---|
+| `scripts/bootstrap-wsl.sh` | 0 | Idempotent apt install with pre-flight checks |
+| `scripts/bootstrap-toolchain.sh` | 0 | rustup + nvm + node + pnpm + cargo-tauri-cli |
+| `docs/DEV-SETUP.md` | 0 | WSL2 install procedure |
+| `LICENSE` | 1 | MIT |
+| `docs/adr/0001-no-stronghold.md` | 1 | Stronghold deprecation warning |
+| `.gitignore` | 1 | Tauri / Rust / Node / pnpm / paranoia |
+| `.github/workflows/ci.yml` | 1 / 10 | CI skeleton; gates flip from warning → error per phase |
+| `tests/fixtures/canonical-tool-prompt.md` | 6a | 3-tool-call fixture for the render-gate |
+| `packaging/icons/biscuitcode.svg` | 8 | Concept A master (verbatim from ref HTML) |
+| `packaging/icons/biscuitcode-icon-concepts.html` | reference | Authoritative design source |
+| `docs/CONVERSATION-EXPORT-SCHEMA.md` | 8 | Versioned JSON schema |
+| `docs/ERROR-CATALOGUE.md` | 9 | E001–E018 skeleton; codes claim slots in earlier phases |
+| `docs/RELEASE.md` | 10 | Smoke-test pointer to Global Acceptance |
+| `docs/design/PROVIDER-TRAIT.md` | 5 / 6a | ModelProvider trait + ChatEvent enum spec |
+| `docs/design/AGENT-LOOP.md` | 6a / 6b | ReAct + pause + snapshot/rewind architecture |
+| `docs/design/CAPABILITIES.md` | 1 / 3 / 5 / 6a / 7 | Deny-by-default capability ACL design |
