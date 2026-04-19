@@ -7,7 +7,9 @@
 
 Bootstrapped the C.Alan pipeline in this repo and ran a **2-round research + 2-round planning + 2-round review + synthesis** flow as you requested. Final source-of-truth is **`docs/plan.md`** (12 phases, ~16 working days). Pre-staged Phase 0 and Phase 1 file-only deliverables so when you're ready, `bash scripts/bootstrap-wsl.sh` from inside WSL2 starts the chain without you having to write the scripts yourself.
 
-**Commit count this session:** 11+ commits on `main` (no remote, nothing pushed). Initial 9 covered the C.Alan pipeline through synthesis + the first round of pre-staged Phase 0/1 deliverables; subsequent commits resolved Q16 (Gemma 4 tag verification), corrected the icon Concept C/D naming, and pre-staged additional Phase 1/6a/8/10 file-only artifacts (LICENSE, real Concept A SVG, reference HTML, CI workflow skeleton, canonical tool prompt fixture, conversation export schema).
+**Commit count this session:** **14 commits** on `main` (no remote, nothing pushed).
+
+Pipeline: bootstrap → research-r1 → plan-r1 → review-r1 → research-r2 → plan-r2 → review-r2 → synthesis (plan.md + self-audit) → Phase 0/1 file-only deliverables → Q16 Gemma 4 verification → Phase 1/6a/8/10 file-only deliverables + Concept C/D fix → architectural design docs (PROVIDER-TRAIT, AGENT-LOOP, CAPABILITIES) + ERROR-CATALOGUE + RELEASE checklist + CLAUDE.md update.
 
 **Stop point:** before any source code that needs to compile. The plan and CLAUDE.md both forbid Windows-native builds — code phases must run from WSL2 + Ubuntu 24.04.
 
@@ -17,14 +19,14 @@ Bootstrapped the C.Alan pipeline in this repo and ran a **2-round research + 2-r
 BiscuitCode/
 ├── CLAUDE.md                                # Project operating system + Four Laws
 ├── README.md                                # Starter readme
-├── LICENSE                                  # MIT (Phase 1 deliverable)
+├── LICENSE                                  # MIT
 ├── .gitignore                               # Tauri / Rust / Node / pnpm / OS / paranoia
 ├── .gitattributes                           # (was here from initial commit)
 ├── .claude/
 │   ├── agents/{researcher,planner,reviewer,coder}.md
 │   └── commands/{research,plan,review-plan,run-phase,run-all}.md
 ├── .github/workflows/
-│   └── ci.yml                               # Phase 1 skeleton; populated through Phase 10
+│   └── ci.yml                               # Phase 1 skeleton (gates flip per phase)
 ├── docs/
 │   ├── vision.md                            # Super prompt v3, locked
 │   ├── research-r1.md                       # Round 1 research (~600 lines)
@@ -32,16 +34,22 @@ BiscuitCode/
 │   ├── plan-r1.md                           # Round 1 plan + reviewer-r1 audit
 │   ├── plan-r2.md                           # Round 2 plan + reviewer-r2 audit
 │   ├── plan.md                              # ★ FINAL synthesized plan (source of truth)
-│   ├── DEV-SETUP.md                         # WSL2 + toolchain setup procedure
+│   ├── DEV-SETUP.md                         # Phase 0 WSL2 + toolchain setup
+│   ├── ERROR-CATALOGUE.md                   # E001-E018 skeleton (Phase 9 audits)
 │   ├── CONVERSATION-EXPORT-SCHEMA.md        # Phase 8 deliverable
+│   ├── RELEASE.md                           # Phase 10 smoke-test checklist
 │   ├── MORNING-BRIEF.md                     # This file
-│   └── adr/
-│       └── 0001-no-stronghold.md            # Why we don't use tauri-plugin-stronghold
+│   ├── adr/
+│   │   └── 0001-no-stronghold.md            # Why we don't use tauri-plugin-stronghold
+│   └── design/
+│       ├── PROVIDER-TRAIT.md                # Phase 5 + 6a — ModelProvider + ChatEvent
+│       ├── AGENT-LOOP.md                    # Phase 6a + 6b — ReAct + pause + rewind
+│       └── CAPABILITIES.md                  # Phase 1/3/5/6a/7 — deny-by-default ACL
 ├── scripts/
-│   ├── bootstrap-wsl.sh                     # Phase 0 — apt installs (system libs)
-│   └── bootstrap-toolchain.sh               # Phase 0 — rustup, nvm, node, pnpm, cargo-tauri
+│   ├── bootstrap-wsl.sh                     # Phase 0 apt installs (system libs)
+│   └── bootstrap-toolchain.sh               # Phase 0 rustup, nvm, node, pnpm, cargo-tauri
 ├── packaging/icons/
-│   ├── biscuitcode.svg                      # Concept A master (verbatim from reference HTML)
+│   ├── biscuitcode.svg                      # Concept A master (verbatim from ref HTML)
 │   └── biscuitcode-icon-concepts.html       # Authoritative design reference (A/B/C)
 └── tests/fixtures/
     └── canonical-tool-prompt.md             # Phase 6a tool-card-render gate fixture
@@ -153,6 +161,23 @@ Things a fresh-context synthesizer would have caught that I might not have:
 These are in `docs/plan.md → ## Open Questions`. Q16 (Gemma 4 tag names) was **resolved post-briefing** by direct verification against `ollama.com/library/gemma4` — see commit `d68b1e1`. Others (Q1 telemetry backend, Q3 icon Concept C spike, Q4 arm64) only matter for v1.0 finalization (Phases 8–10).
 
 **Icon naming correction (post-brief):** the vision text refers to the biscuit-shape alternative as "Concept D" but the authoritative reference (`packaging/icons/biscuitcode-icon-concepts.html`, now in the repo) labels it **Concept C** — there is no Concept D. r1/r2 say "Concept D" — those references all mean the same biscuit-shape Concept C. plan.md has been updated.
+
+## Why I stopped where I stopped
+
+I deliberately did NOT pre-author Phase 1 source code (Rust modules, React components, `tauri.conf.json`, `package.json`, `Cargo.toml`). Reasons:
+
+1. **My CLAUDE.md and `docs/plan.md` Phase 0 explicitly forbid Windows-native builds.** I can't verify any source I write would compile, and broken scaffolding wastes more of your time than no scaffolding.
+2. **`pnpm create tauri-app` produces specific scaffold output** for the exact Tauri version installed via `bootstrap-toolchain.sh`. Pre-writing source files invites merge conflicts against that scaffold.
+3. **Cargo.toml + package.json need pinned versions** verified against `crates.io` and `npm` at install time. I extrapolated some Tauri 2.x versions — those should be confirmed before they're committed as code.
+4. **Capability JSON files are designed in `docs/design/CAPABILITIES.md`** as pseudo-JSON. The Phase 1 coder extracts them to actual JSON files against the real Tauri 2.10.x schema (which I can't verify from Windows).
+
+What I HAVE pre-staged is **architecture contracts and reference docs** the Phase 1+ coder reads to write the actual code:
+- `docs/design/PROVIDER-TRAIT.md` — full trait surface + per-provider normalization
+- `docs/design/AGENT-LOOP.md` — ReAct, pause, snapshot/rewind specifics (read this BEFORE writing Phase 6b)
+- `docs/design/CAPABILITIES.md` — per-phase capability JSON growth path
+- `docs/ERROR-CATALOGUE.md` — every error code with phase-that-registers
+- `docs/RELEASE.md` — Phase 10 smoke-test checklist
+- `docs/CONVERSATION-EXPORT-SCHEMA.md` — Phase 8 schema + import rules
 
 ## Risks I want to flag
 
