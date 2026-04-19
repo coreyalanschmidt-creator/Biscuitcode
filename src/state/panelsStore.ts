@@ -34,6 +34,8 @@ interface PanelsState {
   toggleSide: () => void;
   toggleBottom: () => void;
   toggleChat: () => void;
+  /** Show the bottom panel without toggling (used by Ctrl+` shortcut). */
+  setBottomVisible: (v: boolean) => void;
   setActiveActivity: (a: PanelsState['activeActivity']) => void;
   setSideWidth: (px: number) => void;
   setBottomHeight: (px: number) => void;
@@ -56,6 +58,7 @@ export const usePanelsStore = create<PanelsState>()(
       toggleSide:   () => set((s) => ({ sideVisible:   !s.sideVisible })),
       toggleBottom: () => set((s) => ({ bottomVisible: !s.bottomVisible })),
       toggleChat:   () => set((s) => ({ chatVisible:   !s.chatVisible })),
+      setBottomVisible: (v) => set({ bottomVisible: v }),
 
       setActiveActivity: (a) => set({ activeActivity: a, sideVisible: true }),
 

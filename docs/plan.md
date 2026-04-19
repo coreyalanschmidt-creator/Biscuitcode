@@ -214,7 +214,7 @@ Each decision cites the research section. Decisions marked **(synthesis)** depar
 | 1 | Scaffold + Brand Tokens + Capability Skeleton + Error Infra | Complete | Medium | 0 |
 | 2 | Four-Region Layout + Shortcuts + i18n Scaffold + Installable .deb | Complete | Medium | 1 |
 | 3 | Editor + File Tree + Find/Replace | Complete | Medium | 2 |
-| 4 | Terminal (xterm.js + portable-pty) | Not Started | Medium | 2 |
+| 4 | Terminal (xterm.js + portable-pty) | Complete | Medium | 2 |
 | 5 | Keyring + Anthropic Provider + Chat Panel (virtualized E2E) | Not Started | Medium | 2 |
 | 6a | OpenAI + Ollama Providers + Read-Only Tool Surface + Agent Activity UI | Not Started | Medium | 5 |
 | 6b | Write Tools + Inline Edit (split-diff) + Rewind | Not Started | High | 3, 6a |
@@ -590,13 +590,55 @@ The prior coder's partial work left three active failures. Before fixing them:
 **Dependencies:** Phase 2.
 **Complexity:** Medium.
 **Split rationale:** Terminal is small enough to stand alone — vision allocates one day. Sequencing it before Phase 5 (chat) is intentional: it doesn't need providers, provides an early OS-integration win, and de-risks the Tokio stream-task pattern Phase 5 (provider streaming) and Phase 7 (LSP) will reuse.
-**Status:** Not Started
+**Status:** Complete
 
 #### Pre-Mortem
-_To be filled by coder before implementation._
+
+[PM-01] `biscuitcode-pty/src/lib.rs::PtyRegistry::open` | reader Tokio task blocks at `read()` after child exits, holding the session alive | `master.try_clone_reader()` returns a blocking `Read` impl; running it inside `tokio::task::spawn_blocking` is correct, but if the blocking read is not wrapped that way it blocks the Tokio thread pool entirely. Mechanism: `portable_pty`'s `MasterPty::try_clone_reader()` yields a plain `std::io::Read`, not an async reader; calling `.read()` directly in a `tokio::spawn` future stalls the executor.
+
+[PM-02] `src-tauri/src/lib.rs::terminal_close` command | orphan shell process remains after tab close | `PtySession::close` must wait for the child to exit after dropping the master (which sends SIGHUP). If the wait is done by dropping a JoinHandle without `.await`-ing it, the Tokio task's cleanup runs in the background; the Tauri command returns before the child process has actually exited, failing the AC `pgrep returns no orphans after 2s`.
+
+[PM-03] `src/components/TerminalPanel.tsx` | xterm.js `Terminal` instance not disposed on React unmount | Each tab mounts a `Terminal` and calls `terminal_open`; if the React `useEffect` cleanup does not call `terminal.dispose()` and `invoke('terminal_close', ...)`, closing a tab while xterm.js is still attached will leave a dangling PTY session and an orphan process, failing the orphan-process AC.
 
 #### Execution Notes
-_To be filled by coder after implementation._
+
+**Files changed:**
+- `src-tauri/biscuitcode-pty/src/lib.rs` — full PTY implementation replacing stub
+- `src-tauri/src/Cargo.toml` — added `biscuitcode-pty` dependency
+- `src-tauri/src/commands/mod.rs` — added `pub mod terminal`
+- `src-tauri/src/commands/terminal.rs` — new file: 4 Tauri commands (`terminal_open/input/resize/close`)
+- `src-tauri/src/lib.rs` — wired `PtyRegistry` as Tauri managed state; registered 4 commands
+- `src/components/TerminalPanel.tsx` — full xterm.js implementation replacing Phase 2 stub
+- `src/shortcuts/global.ts` — wired `Ctrl+`` from placeholder to real terminal-focus action
+- `src/state/panelsStore.ts` — added `setBottomVisible` action
+- `src/errors/types.ts` — registered `E003_PtyOpenFailed` interface + added to `AppErrorPayload` union
+- `src/components/EditorArea.tsx` — added `biscuitcode:open-file-at` + `biscuitcode:editor-reveal-line` handlers for terminal link provider
+- `tests/shortcuts/global.spec.ts` — updated `Ctrl+`` test from placeholder-toast to real-action assertion
+- `tests/error-catalogue.spec.ts` — added E003 trigger
+- `package.json` / `pnpm-lock.yaml` — added `@xterm/xterm`, `@xterm/addon-fit`, `@xterm/addon-web-links`, `@xterm/addon-search`, `@xterm/addon-webgl`
+
+**Approach:** Implemented the full PTY backend in `biscuitcode-pty` using `portable-pty 0.8` with two Tokio tasks per session (reader in `spawn_blocking`, writer in `spawn`). Wrapped `master` and `child` in `parking_lot::Mutex<Option<...>>` to satisfy `Send + Sync` for Tauri's `State<T: Send + Sync>` bound. The `close()` path takes the master out of its Mutex, drops it (SIGHUP), calls `child.kill()` (SIGHUP → SIGKILL fallback), then waits — ensuring no orphans. Pre-generated `SessionId` before `PtyRegistry::open` so the reader callback can embed the per-session event name `terminal_data_<id>`. Frontend uses all four xterm.js addons with WebGL + canvas fallback; custom `registerLinkProvider` handles `path:line[:col]` patterns; `Ctrl+`` fires `biscuitcode:terminal-focus` which is consumed by `TerminalPanel`. `open_file_at` events are handled in `EditorArea` with a 100ms settle delay before `revealLineInCenter`.
+
+**Pre-Mortem reconciliation:**
+[PM-01] AVOIDED | `biscuitcode-pty/src/lib.rs::PtyRegistry::open` | reader blocks Tokio executor | reader task correctly placed in `tokio::task::spawn_blocking`; the plain `std::io::Read` from `try_clone_reader()` runs in a dedicated OS thread, not on the async executor.
+[PM-02] CONFIRMED | `src-tauri/src/lib.rs::terminal_close` | orphan after tab close | First attempt hung in tests because `child.wait()` after only SIGHUP was blocking (bash ignores SIGHUP in interactive mode). Fixed by calling `child.kill()` explicitly before `child.wait()`, which delivers SIGHUP first then SIGKILL after a grace period. Tests confirmed by `registry_open_and_close_no_orphan` passing.
+[PM-03] AVOIDED | `src/components/TerminalPanel.tsx` | Terminal not disposed on unmount | Each tab's cleanup is handled in `closeTab` (calls `terminal.dispose()` + `invoke('terminal_close')`) and in a top-level `useEffect` cleanup that iterates all instances on unmount. The Rust `close()` call is fired from both paths.
+[UNPREDICTED] | `biscuitcode-pty/src/lib.rs::PtySession` | `Box<dyn MasterPty + Send>` not `Sync` | Tauri's `State<T>` requires `T: Send + Sync`. `Box<dyn X + Send>` is not `Sync`. Fix: wrapped `master` and `child` in `Mutex<Option<...>>`, which is `Sync`.
+[UNPREDICTED] | `portable_pty::MasterPty` | `take_writer` not `try_clone_writer` | Assumed `try_clone_writer` method name; the actual API is `take_writer` (single consumer, not cloneable). Fixed by reading the upstream trait definition.
+
+**Deviations:**
+- `open()` signature gained an `Option<SessionId>` parameter (not in the stub) so the caller can pre-generate the ID for the emit callback. This is a backwards-compatible addition to the internal API.
+- `PtySession.master` and `PtySession.child` changed from plain `Box<dyn ... + Send>` to `Mutex<Option<Box<dyn ... + Send>>>` to satisfy the `Sync` requirement. Public API unchanged.
+- `Ctrl+`` test updated from "fires placeholder toast" to "fires terminal-focus + shows bottom panel" — the Phase 2 test accurately predicted this would change in Phase 4.
+
+**New findings:**
+- Phase 5 will need similar `Arc<Mutex<...>>` wrapping if any `!Sync` types appear in Tauri-managed state structs. The pattern is now established.
+- `EditorArea.tsx` now has a `biscuitcode:open-file-at` handler (Phase 4 addition to a Phase 3 file). This is a minimal, targeted addition; not a refactor of Phase 3 code.
+
+**Follow-ups:**
+- The 100ms settle delay before `revealLineInCenter` in EditorArea is a heuristic; if the file is large or on a slow filesystem, 100ms may not be enough. A proper fix would use an event/promise after the model load completes (Phase 6b or later).
+- `xterm.js` CSS (`@xterm/xterm/css/xterm.css`) is imported in TerminalPanel.tsx. Vite handles this correctly but the i18n scanner shouldn't touch CSS. Pre-existing behavior.
+- The `detect_shell` fallback via `getent passwd $UID` parses `/proc/self/status` to get UID when `$UID` is not exported. In some containers/environments `/proc/self/status` may be unavailable; the final fallback to `/bin/bash` handles this correctly.
 
 ---
 

@@ -11,9 +11,10 @@
 mod commands;
 
 use biscuitcode_core::errors::CatalogueError;
+use biscuitcode_pty::PtyRegistry;
 use commands::fs::WorkspaceState;
 use serde::Serialize;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 use tracing_subscriber::EnvFilter;
 
@@ -35,6 +36,7 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         // ----------------------------------------
         .manage(WorkspaceState(Mutex::new(None)))
+        .manage(Arc::new(PtyRegistry::new()))
         .invoke_handler(tauri::generate_handler![
             check_secret_service,
             emit_mock_error,
@@ -47,6 +49,10 @@ pub fn run() {
             commands::fs::fs_create_dir,
             commands::fs::fs_search_files,
             commands::fs::fs_search_content,
+            commands::terminal::terminal_open,
+            commands::terminal::terminal_input,
+            commands::terminal::terminal_resize,
+            commands::terminal::terminal_close,
         ])
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();

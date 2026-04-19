@@ -129,9 +129,21 @@ describe('shortcut handler dispatch', () => {
     expect(events.length).toBe(1);
   });
 
+  // Phase 4 real-action shortcut: Ctrl+` shows the bottom panel and fires
+  // biscuitcode:terminal-focus (no longer a placeholder toast).
+  it('Ctrl+` shows bottom panel and fires terminal-focus event', () => {
+    usePanelsStore.setState({ bottomVisible: false });
+    const focusEvents: Event[] = [];
+    const focusListener = (e: Event) => focusEvents.push(e);
+    window.addEventListener('biscuitcode:terminal-focus', focusListener);
+    SHORTCUTS['Ctrl+`'].handler(new KeyboardEvent('keydown'));
+    window.removeEventListener('biscuitcode:terminal-focus', focusListener);
+    expect(focusEvents.length).toBe(1);
+    expect(usePanelsStore.getState().bottomVisible).toBe(true);
+  });
+
   // Placeholder shortcuts — must fire biscuitcode:toast (not silently no-op).
   const placeholderCombos = [
-    'Ctrl+`',
     'Ctrl+K Ctrl+I',
     'Ctrl+L',
     'Ctrl+Shift+L',

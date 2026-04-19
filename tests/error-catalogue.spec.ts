@@ -79,7 +79,32 @@ const TRIGGERS: Partial<Record<ErrorCode, TriggerFn>> = {
     return payload;
   },
 
-  // E002 → E018 added by their owning phases. Until then, .skip.
+  // Phase 4 — E003 PtyOpenFailed: forces a synthetic PTY-open failure
+  // (non-existent shell binary) and asserts the toast renders correctly.
+  E003: async () => {
+    const payload: AppErrorPayload = {
+      code: 'E003',
+      messageKey: 'errors.E003.msg',
+      interpolations: { reason: '/bin/does-not-exist: No such file or directory' },
+      recovery: { kind: 'dismiss_only' },
+    };
+
+    const { getAllByRole, queryByText } = render(React.createElement(ToastLayer));
+    window.dispatchEvent(new CustomEvent('biscuitcode:error-toast', { detail: payload }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Find the E003 alert specifically (other tests may have left E001 toast in DOM).
+    const alerts = getAllByRole('alert');
+    const e003Alert = alerts.find((el) => el.getAttribute('data-error-code') === 'E003');
+    if (!e003Alert) throw new Error('E003 alert not found in rendered toast layer');
+
+    expect(e003Alert.textContent).toContain('terminal');
+    expect(queryByText(/at \w+ \(/)?.textContent).toBeUndefined();
+    expect(e003Alert.textContent).toContain('E003');
+    return payload;
+  },
+
+  // E004 → E018 added by their owning phases. Until then, .skip.
 };
 
 // ---------- The harness ----------

@@ -64,7 +64,11 @@ export const SHORTCUTS: Readonly<Record<string, ShortcutSpec>> = Object.freeze({
   'Ctrl+`': {
     label: 'Ctrl+`',
     phase: 4,
-    handler: placeholder('Ctrl+` terminal focus', 4),
+    handler: () => {
+      // Show the bottom panel (where the terminal lives) and focus the terminal.
+      usePanelsStore.getState().setBottomVisible(true);
+      window.dispatchEvent(new CustomEvent('biscuitcode:terminal-focus'));
+    },
   },
   'Ctrl+\\': {
     label: 'Ctrl+\\',

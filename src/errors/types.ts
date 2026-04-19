@@ -83,7 +83,15 @@ export interface E007_GemmaVersionFallback extends BaseErrorPayload {
   };
 }
 
-// (Variants for E003–E006, E008–E018 are added by their owning phases.
+// Phase 4 — E003 registered.
+export interface E003_PtyOpenFailed extends BaseErrorPayload {
+  code: 'E003';
+  messageKey: 'errors.E003.msg';
+  interpolations: { reason: string };
+  recovery: { kind: 'dismiss_only' };
+}
+
+// (Variants for E004–E006, E008–E018 are added by their owning phases.
 //  Use the same pattern: extend BaseErrorPayload with a literal `code`
 //  and the specific i18n key + recovery type.)
 
@@ -91,6 +99,7 @@ export interface E007_GemmaVersionFallback extends BaseErrorPayload {
 export type AppErrorPayload =
   | E001_KeyringMissing
   | E002_OutsideWorkspace
+  | E003_PtyOpenFailed
   | E007_GemmaVersionFallback;
 // Add more here as phases register their codes.
 

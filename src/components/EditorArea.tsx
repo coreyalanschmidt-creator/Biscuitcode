@@ -232,6 +232,21 @@ function MonacoPane({ tabId }: MonacoPaneProps) {
       });
   }, [tabId, monaco]);
 
+  // Phase 4: handle reveal-line events from the terminal link provider.
+  useEffect(() => {
+    const handleReveal = (e: Event) => {
+      const detail = (e as CustomEvent<{ path: string; line: number; col: number }>).detail;
+      if (!detail || !tab || detail.path !== tab.path) return;
+      const editor = editorRef.current;
+      if (!editor) return;
+      editor.revealLineInCenter(detail.line);
+      editor.setPosition({ lineNumber: detail.line, column: detail.col ?? 1 });
+      editor.focus();
+    };
+    window.addEventListener('biscuitcode:editor-reveal-line', handleReveal);
+    return () => window.removeEventListener('biscuitcode:editor-reveal-line', handleReveal);
+  }, [tab?.path]);
+
   const handleMount = useCallback(
     (editor: import('monaco-editor').editor.IStandaloneCodeEditor) => {
       editorRef.current = editor;
@@ -297,13 +312,31 @@ export function EditorArea() {
       const detail = (e as CustomEvent<{ path: string }>).detail;
       if (detail?.path) openTab(detail.path);
     };
+    // Phase 4: terminal link provider fires this event to open a file at a
+    // specific line/column. Open the tab first, then re-emit a reveal event
+    // that MonacoPane handles after the model is ready.
+    const handleOpenFileAt = (e: Event) => {
+      const detail = (e as CustomEvent<{ path: string; line: number; col: number }>).detail;
+      if (!detail?.path) return;
+      openTab(detail.path);
+      // Give the model a tick to load before revealing.
+      setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent('biscuitcode:editor-reveal-line', {
+            detail: { path: detail.path, line: detail.line, col: detail.col ?? 1 },
+          }),
+        );
+      }, 100);
+    };
     window.addEventListener('biscuitcode:editor-quick-open', handleCtrlP);
     window.addEventListener('biscuitcode:editor-split', handleCtrlSlash);
     window.addEventListener('biscuitcode:editor-open-file', handleOpenFile);
+    window.addEventListener('biscuitcode:open-file-at', handleOpenFileAt);
     return () => {
       window.removeEventListener('biscuitcode:editor-quick-open', handleCtrlP);
       window.removeEventListener('biscuitcode:editor-split', handleCtrlSlash);
       window.removeEventListener('biscuitcode:editor-open-file', handleOpenFile);
+      window.removeEventListener('biscuitcode:open-file-at', handleOpenFileAt);
     };
   }, [toggleSplit, openTab]);
 

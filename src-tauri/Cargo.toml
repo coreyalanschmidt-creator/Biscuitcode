@@ -34,10 +34,10 @@ tauri-plugin-os = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-process = "2"
 
-# Phase 1 — shared primitives. Only biscuitcode-core wired to the main
-# binary this phase. Others are declared as workspace members but remain
-# as standalone libraries until their owning phases wire them.
+# Phase 1 — shared primitives.
 biscuitcode-core = { path = "biscuitcode-core" }
+# Phase 4 — PTY backend.
+biscuitcode-pty = { path = "biscuitcode-pty" }
 
 # Async + serde
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
