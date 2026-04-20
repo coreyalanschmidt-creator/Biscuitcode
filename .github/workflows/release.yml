@@ -106,46 +106,28 @@ jobs:
         run: bash scripts/render-icons.sh
 
       # ------------------------------------------------------------------
-      # Build .deb + AppImage via tauri-action. The action handles the
-      # Tauri CLI install and signs updater artifacts when
+      # Build .deb + AppImage via tauri-action in BUILD-ONLY mode. The action
+      # handles the Tauri CLI install and signs updater artifacts when
       # TAURI_SIGNING_PRIVATE_KEY is present in the environment.
+      #
+      # We deliberately omit tagName/releaseName/releaseBody/releaseDraft so
+      # tauri-action does NOT create or upload to a GitHub Release. Reason:
+      # tauri-action 404s when uploading latest.json to a draft release, which
+      # aborts the job before GPG-sign/SHA256/softprops can run. The softprops
+      # step at the bottom creates the draft and uploads everything atomically.
       # ------------------------------------------------------------------
-      - name: Build and publish release
+      - name: Build artifacts
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: BiscuitCode ${{ github.ref_name }}
-          releaseBody: |
-            ## BiscuitCode ${{ github.ref_name }}
-
-            See [INSTALL.md](https://github.com/Coreyalanschmidt-creator/biscuitcode/blob/main/docs/INSTALL.md) for installation instructions.
-
-            ### Install (recommended)
-            ```
-            sudo dpkg -i BiscuitCode_<version>_amd64.deb
-            sudo apt -f install
-            ```
-
-            ### AppImage (portable)
-            ```
-            sudo apt install libfuse2t64
-            chmod +x BiscuitCode_<version>_amd64.AppImage
-            ./BiscuitCode_<version>_amd64.AppImage
-            ```
-
-            ### Known limitations in this release
-            - LSP hover / go-to-definition not implemented (OQ #19, deferred post-v1).
-            - Wayland-XFCE not supported (XFCE 4.18 has no Wayland; Cinnamon-Wayland is best-effort).
-          releaseDraft: true
-          prerelease: false
           args: --target x86_64-unknown-linux-gnu
 
       # ------------------------------------------------------------------
-      # GPG-sign both artifacts and generate SHA256SUMS.
-      # Runs after tauri-action uploads artifacts to the release.
+      # GPG-sign both artifacts and generate SHA256SUMS. Runs on the
+      # build products in src-tauri/target (tauri-action built them in
+      # the previous step but did NOT publish).
       # ------------------------------------------------------------------
       # The GPG_PRIVATE_KEY secret MUST be base64-encoded. Generate with:
       #   gpg --armor --export-secret-keys <fingerprint> | base64 -w0 | xclip
@@ -215,12 +197,14 @@ jobs:
 
       # ------------------------------------------------------------------
       # Generate latest.json for the Tauri AppImage updater.
-      # tauri-action generates this automatically when TAURI_SIGNING_PRIVATE_KEY
-      # is set; this step provides a fallback that matches the expected schema.
+      # This is the primary manifest — we generate it ourselves rather than
+      # letting tauri-action do it, because tauri-action 404s when uploading
+      # latest.json to draft releases. The softprops step below uploads it.
       # ------------------------------------------------------------------
       - name: Generate latest.json (updater manifest)
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           APPIMAGE_FILENAME=$(basename "$APPIMAGE_PATH")
           APPIMAGE_SIG_FILE="${APPIMAGE_PATH}.sig"
 
@@ -258,14 +242,52 @@ jobs:
           cat latest.json
 
       # ------------------------------------------------------------------
-      # Upload GPG signatures, SHA256SUMS, and latest.json to the release.
+      # Create the GitHub Release as a draft and upload ALL artifacts in one
+      # atomic step. softprops handles draft uploads cleanly (unlike
+      # tauri-action, which 404s on latest.json upload to drafts).
+      #
+      # Release contents:
+      #   - .deb + .deb.sig          (Tauri minisign for updater)
+      #   - .deb.asc                 (GPG detached sig for install-time verify)
+      #   - .AppImage + .AppImage.sig (same pattern as .deb)
+      #   - .AppImage.asc            (GPG detached sig)
+      #   - SHA256SUMS.txt           (checksums for primary artifacts)
+      #   - latest.json              (Tauri updater manifest)
       # ------------------------------------------------------------------
-      - name: Upload signed artifacts
+      - name: Create GitHub Release (draft)
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
+          name: BiscuitCode ${{ github.ref_name }}
           draft: true
+          prerelease: false
+          body: |
+            ## BiscuitCode ${{ github.ref_name }}
+
+            See [INSTALL.md](https://github.com/Coreyalanschmidt-creator/biscuitcode/blob/main/docs/INSTALL.md) for installation instructions.
+
+            ### Install (recommended)
+            ```
+            sudo dpkg -i BiscuitCode_${{ env.VERSION }}_amd64.deb
+            sudo apt -f install
+            ```
+
+            ### AppImage (portable)
+            ```
+            sudo apt install libfuse2t64
+            chmod +x BiscuitCode_${{ env.VERSION }}_amd64.AppImage
+            ./BiscuitCode_${{ env.VERSION }}_amd64.AppImage
+            ```
+
+            ### Known limitations in this release
+            - LSP hover / go-to-definition not implemented (OQ #19, deferred post-v1).
+            - Wayland-XFCE not supported (XFCE 4.18 has no Wayland; Cinnamon-Wayland is best-effort).
           files: |
+            ${{ env.DEB_PATH }}
+            ${{ env.DEB_PATH }}.sig
             ${{ env.DEB_PATH }}.asc
+            ${{ env.APPIMAGE_PATH }}
+            ${{ env.APPIMAGE_PATH }}.sig
             ${{ env.APPIMAGE_PATH }}.asc
             SHA256SUMS.txt
             latest.json
