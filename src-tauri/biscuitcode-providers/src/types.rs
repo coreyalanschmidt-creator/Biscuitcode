@@ -40,13 +40,23 @@ pub type MessageRole = Role;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
-    Text { text: String },
+    Text {
+        text: String,
+    },
     /// Structured @ mention from the chat input picker.
-    Mention { mention_kind: MentionKind, value: serde_json::Value },
+    Mention {
+        mention_kind: MentionKind,
+        value: serde_json::Value,
+    },
     /// Vision input. Only used when the selected model supports vision.
-    Image { media_type: String, data_b64: String },
+    Image {
+        media_type: String,
+        data_b64: String,
+    },
     /// Provider thinking content (Anthropic; OpenAI reasoning models).
-    Thinking { text: String },
+    Thinking {
+        text: String,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]

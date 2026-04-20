@@ -13,8 +13,8 @@
 //! Design contract: docs/design/AGENT-LOOP.md.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use thiserror::Error;
 use tokio::time::{Duration, Instant};
@@ -88,8 +88,11 @@ pub struct ExecutorContext {
     /// Optional callback invoked for every `ChatEvent` emitted while streaming.
     /// Allows the Tauri command handler to forward stream events to the frontend.
     /// `None` means events are not forwarded (used in tests).
-    pub emit_event: Option<Arc<dyn Fn(&ChatEvent) + Send + Sync>>,
+    pub emit_event: Option<EventEmitter>,
 }
+
+/// Type alias for the callback that forwards `ChatEvent`s to the frontend.
+pub type EventEmitter = Arc<dyn Fn(&ChatEvent) + Send + Sync>;
 
 pub struct ReActExecutor {
     pub registry: Arc<ToolRegistry>,
@@ -146,12 +149,18 @@ impl ReActExecutor {
             }
 
             // 2. Stream from the provider.
-            let tools = if agent_mode { self.registry.specs() } else { vec![] };
+            let tools = if agent_mode {
+                self.registry.specs()
+            } else {
+                vec![]
+            };
             let mut stream = provider
                 .chat_stream(messages.clone(), tools, opts.clone())
                 .await?;
 
-            let assistant_msg = self.consume_stream(&mut stream, emit_event.as_deref()).await?;
+            let assistant_msg = self
+                .consume_stream(&mut stream, emit_event.as_deref())
+                .await?;
             messages.push(assistant_msg.clone());
 
             // 3. No tool calls -> we're done.
@@ -218,7 +227,9 @@ impl ReActExecutor {
                 ChatEvent::ThinkingDelta { .. } => { /* persist separately */ }
                 ChatEvent::ToolCallStart { id, name } => {
                     tool_calls.push(ToolCall {
-                        id, name, args_json: String::new(),
+                        id,
+                        name,
+                        args_json: String::new(),
                     });
                 }
                 ChatEvent::ToolCallDelta { id, args_delta } => {
@@ -232,11 +243,13 @@ impl ReActExecutor {
                     }
                 }
                 ChatEvent::Done { .. } => break,
-                ChatEvent::Error { code, message, recoverable } => {
+                ChatEvent::Error {
+                    code,
+                    message,
+                    recoverable,
+                } => {
                     if !recoverable {
-                        return Err(ProviderError::Other(
-                            format!("{code}: {message}")
-                        ).into());
+                        return Err(ProviderError::Other(format!("{code}: {message}")).into());
                     }
                     tracing::warn!(code = %code, %message, "recoverable stream error");
                 }
@@ -321,9 +334,7 @@ impl ReActExecutor {
                 };
 
                 match decision {
-                    Decision::Deny => {
-                        Err(ExecutorError::UserDenied(tc.name.clone()))
-                    }
+                    Decision::Deny => Err(ExecutorError::UserDenied(tc.name.clone())),
                     Decision::DenyWithFeedback { feedback } => {
                         Err(ExecutorError::UserDeniedWithFeedback(feedback))
                     }
@@ -353,7 +364,10 @@ impl ReActExecutor {
 
 /// Attempt to extract file paths from tool args for snapshotting.
 /// Looks for a "path" or "paths" key.
-fn extract_paths_from_args(args: &serde_json::Value, workspace_root: &std::path::Path) -> Vec<PathBuf> {
+fn extract_paths_from_args(
+    args: &serde_json::Value,
+    workspace_root: &std::path::Path,
+) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     if let Some(p) = args.get("path").and_then(|v| v.as_str()) {
         let resolved = if std::path::Path::new(p).is_absolute() {

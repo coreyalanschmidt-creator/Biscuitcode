@@ -122,6 +122,7 @@ impl Database {
 
 impl Database {
     /// Append a message to a conversation. Returns the stored message.
+    #[allow(clippy::too_many_arguments)]
     pub fn append_message(
         &mut self,
         conversation_id: &ConversationId,
@@ -216,8 +217,8 @@ fn row_to_conversation(row: &Row) -> rusqlite::Result<Conversation> {
 }
 
 fn row_to_message(row: &Row) -> rusqlite::Result<StoredMessage> {
-    use chrono::DateTime;
     use crate::types::{MessageId, SnapshotId};
+    use chrono::DateTime;
 
     let created_at_str: String = row.get(4)?;
     let content_json: String = row.get(6)?;
@@ -360,11 +361,14 @@ impl Database {
         from_message_id: &MessageId,
     ) -> Result<Vec<Snapshot>, DbError> {
         // Find the `created_at` of the from_message.
-        let from_created: Option<String> = self.conn.query_row(
-            "SELECT created_at FROM messages WHERE message_id = ?1",
-            params![from_message_id.0],
-            |row| row.get(0),
-        ).optional()?;
+        let from_created: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT created_at FROM messages WHERE message_id = ?1",
+                params![from_message_id.0],
+                |row| row.get(0),
+            )
+            .optional()?;
 
         let from_created = match from_created {
             Some(t) => t,
@@ -474,7 +478,9 @@ mod tests {
     fn append_and_list_messages() {
         let mut db = Database::open_in_memory().unwrap();
         let ws = db.upsert_workspace("/tmp/msg_test").unwrap();
-        let conv = db.create_conversation(&ws, "Chat", "claude-opus-4-7").unwrap();
+        let conv = db
+            .create_conversation(&ws, "Chat", "claude-opus-4-7")
+            .unwrap();
 
         let user_msg = db
             .append_message(
@@ -482,7 +488,9 @@ mod tests {
                 None,
                 MessageRole::User,
                 "",
-                &[ContentBlock::Text { text: "Hello".to_string() }],
+                &[ContentBlock::Text {
+                    text: "Hello".to_string(),
+                }],
                 &[],
                 &[],
                 None,
@@ -495,13 +503,15 @@ mod tests {
             cache_read_input_tokens: None,
             cache_creation_input_tokens: None,
         };
-        let asst_msg = db
+        let _asst_msg = db
             .append_message(
                 &conv.conversation_id,
                 Some(&user_msg.message_id),
                 MessageRole::Assistant,
                 "claude-opus-4-7",
-                &[ContentBlock::Text { text: "Hi there!".to_string() }],
+                &[ContentBlock::Text {
+                    text: "Hi there!".to_string(),
+                }],
                 &[],
                 &[],
                 Some(&usage),
@@ -514,17 +524,16 @@ mod tests {
         assert_eq!(msgs[1].role, MessageRole::Assistant);
         assert_eq!(msgs[1].usage.as_ref().unwrap().input_tokens, 5);
         // parent linkage
-        assert_eq!(
-            msgs[1].parent_id.as_ref().unwrap().0,
-            user_msg.message_id.0
-        );
+        assert_eq!(msgs[1].parent_id.as_ref().unwrap().0, user_msg.message_id.0);
     }
 
     #[test]
     fn conversation_touch_updates_leaf() {
         let mut db = Database::open_in_memory().unwrap();
         let ws = db.upsert_workspace("/tmp/touch_test").unwrap();
-        let conv = db.create_conversation(&ws, "Conv", "claude-haiku-4-5-20251001").unwrap();
+        let conv = db
+            .create_conversation(&ws, "Conv", "claude-haiku-4-5-20251001")
+            .unwrap();
 
         let msg = db
             .append_message(
@@ -553,14 +562,18 @@ mod tests {
 
         let mut db = Database::open_in_memory().unwrap();
         let ws = db.upsert_workspace("/tmp/snap_test").unwrap();
-        let conv = db.create_conversation(&ws, "SnapConv", "claude-opus-4-7").unwrap();
+        let conv = db
+            .create_conversation(&ws, "SnapConv", "claude-opus-4-7")
+            .unwrap();
         let msg = db
             .append_message(
                 &conv.conversation_id,
                 None,
                 MessageRole::User,
                 "",
-                &[ContentBlock::Text { text: "edit file".into() }],
+                &[ContentBlock::Text {
+                    text: "edit file".into(),
+                }],
                 &[],
                 &[],
                 None,
@@ -596,7 +609,9 @@ mod tests {
     fn truncate_messages_after_removes_later_messages() {
         let mut db = Database::open_in_memory().unwrap();
         let ws = db.upsert_workspace("/tmp/truncate_test").unwrap();
-        let conv = db.create_conversation(&ws, "TruncConv", "claude-opus-4-7").unwrap();
+        let conv = db
+            .create_conversation(&ws, "TruncConv", "claude-opus-4-7")
+            .unwrap();
 
         let m1 = db
             .append_message(
@@ -604,7 +619,9 @@ mod tests {
                 None,
                 MessageRole::User,
                 "",
-                &[ContentBlock::Text { text: "msg1".into() }],
+                &[ContentBlock::Text {
+                    text: "msg1".into(),
+                }],
                 &[],
                 &[],
                 None,
@@ -620,7 +637,9 @@ mod tests {
                 Some(&m1.message_id),
                 MessageRole::Assistant,
                 "claude-opus-4-7",
-                &[ContentBlock::Text { text: "msg2".into() }],
+                &[ContentBlock::Text {
+                    text: "msg2".into(),
+                }],
                 &[],
                 &[],
                 None,
@@ -634,7 +653,11 @@ mod tests {
             .unwrap();
 
         let msgs_after = db.list_messages(&conv.conversation_id).unwrap();
-        assert_eq!(msgs_after.len(), 1, "only m1 should remain after truncation");
+        assert_eq!(
+            msgs_after.len(),
+            1,
+            "only m1 should remain after truncation"
+        );
         assert_eq!(msgs_after[0].message_id.0, m1.message_id.0);
 
         // active_branch_message_id should point to m1.

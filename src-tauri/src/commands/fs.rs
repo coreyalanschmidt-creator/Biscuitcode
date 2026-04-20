@@ -83,15 +83,11 @@ impl From<std::io::Error> for FsError {
 ///
 /// Returns the canonical `PathBuf` on success or `E002 OutsideWorkspace`
 /// if the check fails.
-fn assert_inside_workspace(
-    workspace_root: &Path,
-    path: &str,
-) -> Result<PathBuf, CatalogueError> {
-    let canonical_root = std::fs::canonicalize(workspace_root).map_err(|_| {
-        CatalogueError::OutsideWorkspace {
+fn assert_inside_workspace(workspace_root: &Path, path: &str) -> Result<PathBuf, CatalogueError> {
+    let canonical_root =
+        std::fs::canonicalize(workspace_root).map_err(|_| CatalogueError::OutsideWorkspace {
             path: path.to_string(),
-        }
-    })?;
+        })?;
 
     let canonical_path = std::fs::canonicalize(path).map_err(|_| {
         // Path may not exist yet (e.g. new file). Fall back to lexical check
@@ -102,9 +98,9 @@ fn assert_inside_workspace(
             Ok(cp) if cp.starts_with(&canonical_root) => {
                 // Parent is inside; the path itself will be inside once created.
                 // We return the un-canonicalized path so callers can create it.
-                return CatalogueError::OutsideWorkspace {
+                CatalogueError::OutsideWorkspace {
                     path: "__PARENT_OK__".to_string(),
-                };
+                }
             }
             _ => CatalogueError::OutsideWorkspace {
                 path: path.to_string(),
@@ -133,15 +129,10 @@ fn assert_inside_workspace(
 /// Get the current workspace root from managed state, returning a human error
 /// if no folder has been opened.
 fn get_workspace_root(state: &State<WorkspaceState>) -> Result<PathBuf, FsError> {
-    state
-        .0
-        .lock()
-        .unwrap()
-        .clone()
-        .ok_or_else(|| FsError {
-            code: "E000",
-            message: "No workspace folder is open. Use Open Folder first.".to_string(),
-        })
+    state.0.lock().unwrap().clone().ok_or_else(|| FsError {
+        code: "E000",
+        message: "No workspace folder is open. Use Open Folder first.".to_string(),
+    })
 }
 
 // ---------- Commands ----------
@@ -150,10 +141,7 @@ fn get_workspace_root(state: &State<WorkspaceState>) -> Result<PathBuf, FsError>
 ///
 /// Returns the canonical path string so the frontend can display it.
 #[tauri::command]
-pub fn fs_open_folder(
-    app: tauri::AppHandle,
-    state: State<'_, WorkspaceState>,
-) -> FsResult<String> {
+pub fn fs_open_folder(app: tauri::AppHandle, state: State<'_, WorkspaceState>) -> FsResult<String> {
     use tauri_plugin_dialog::DialogExt;
 
     let folder = app
@@ -288,7 +276,9 @@ fn walk_dir_for_files(
     if results.len() >= limit {
         return;
     }
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.filter_map(|e| e.ok()) {
         if results.len() >= limit {
             return;
@@ -356,7 +346,9 @@ pub fn fs_search_content(
         if !path.is_file() {
             continue;
         }
-        let Ok(content) = std::fs::read_to_string(path) else { continue };
+        let Ok(content) = std::fs::read_to_string(path) else {
+            continue;
+        };
         for (line_idx, line_text) in content.lines().enumerate() {
             if pattern(line_text) {
                 let relative = path

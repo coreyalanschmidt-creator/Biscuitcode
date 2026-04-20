@@ -44,9 +44,14 @@ pub struct UpdateInfo {
 #[tauri::command]
 pub async fn check_for_deb_update(app: AppHandle) -> Result<UpdateInfo, String> {
     // Read the current app version from the Tauri context.
-    let current = app.config().version.clone().unwrap_or_else(|| "0.0.0".to_string());
+    let current = app
+        .config()
+        .version
+        .clone()
+        .unwrap_or_else(|| "0.0.0".to_string());
 
-    let api_url = "https://api.github.com/repos/Coreyalanschmidt-creator/biscuitcode/releases/latest";
+    let api_url =
+        "https://api.github.com/repos/Coreyalanschmidt-creator/biscuitcode/releases/latest";
 
     // Use reqwest (already a transitive dep via biscuitcode-providers).
     let client = reqwest::Client::builder()
@@ -91,8 +96,16 @@ pub async fn check_for_deb_update(app: AppHandle) -> Result<UpdateInfo, String> 
 
     Ok(UpdateInfo {
         update_available,
-        latest_version: if update_available { Some(release.tag_name.clone()) } else { None },
-        release_url: if update_available { Some(release.html_url) } else { None },
+        latest_version: if update_available {
+            Some(release.tag_name.clone())
+        } else {
+            None
+        },
+        release_url: if update_available {
+            Some(release.html_url)
+        } else {
+            None
+        },
         changelog_excerpt: excerpt,
     })
 }
@@ -140,7 +153,9 @@ pub async fn install_appimage_update(app: AppHandle) -> Result<(), String> {
 fn semver_gt(a: &str, b: &str) -> bool {
     fn parse(s: &str) -> Option<(u32, u32, u32)> {
         let parts: Vec<&str> = s.splitn(3, '.').collect();
-        if parts.len() < 3 { return None; }
+        if parts.len() < 3 {
+            return None;
+        }
         Some((
             parts[0].parse().ok()?,
             parts[1].parse().ok()?,

@@ -62,8 +62,13 @@ if ! command -v rsvg-convert &>/dev/null; then
   exit 1
 fi
 
-if ! command -v convert &>/dev/null; then
-  echo "ERROR: convert (ImageMagick) not found. Install: sudo apt install imagemagick"
+MAGICK=""
+if command -v magick &>/dev/null; then
+  MAGICK="magick"
+elif command -v convert &>/dev/null; then
+  MAGICK="convert"
+else
+  echo "ERROR: ImageMagick not found (neither 'magick' nor 'convert'). Install: sudo apt install imagemagick"
   exit 1
 fi
 
@@ -86,7 +91,7 @@ cp "$ICONS_DIR/biscuitcode-256.png" "$TAURI_ICONS/128x128@2x.png"
 
 # Assemble .ico (Windows future / cross-platform).
 echo "  Assembling icon.ico..."
-convert \
+"$MAGICK" \
   "$ICONS_DIR/biscuitcode-16.png" \
   "$ICONS_DIR/biscuitcode-32.png" \
   "$ICONS_DIR/biscuitcode-48.png" \

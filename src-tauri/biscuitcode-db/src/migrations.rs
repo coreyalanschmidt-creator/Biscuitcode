@@ -27,8 +27,7 @@ pub const MAX_SCHEMA_VERSION: u32 = 1;
 
 /// Apply every migration with target version > current `user_version`.
 pub fn run(conn: &mut Connection) -> Result<(), DbError> {
-    let current: u32 = conn
-        .pragma_query_value(None, "user_version", |row| row.get(0))?;
+    let current: u32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
 
     if current > MAX_SCHEMA_VERSION {
         return Err(DbError::SchemaTooNew {
@@ -42,11 +41,10 @@ pub fn run(conn: &mut Connection) -> Result<(), DbError> {
             continue;
         }
         let tx = conn.transaction().map_err(DbError::from)?;
-        tx.execute_batch(sql)
-            .map_err(|e| DbError::Migration {
-                version: *target,
-                reason: format!("{e}"),
-            })?;
+        tx.execute_batch(sql).map_err(|e| DbError::Migration {
+            version: *target,
+            reason: format!("{e}"),
+        })?;
         tx.pragma_update(None, "user_version", target)?;
         tx.commit().map_err(DbError::from)?;
     }
@@ -62,7 +60,9 @@ mod tests {
     fn fresh_db_runs_all_migrations() {
         let mut conn = Connection::open_in_memory().unwrap();
         run(&mut conn).unwrap();
-        let v: u32 = conn.pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
+        let v: u32 = conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
         assert_eq!(v, MAX_SCHEMA_VERSION);
     }
 
@@ -70,15 +70,18 @@ mod tests {
     fn double_run_is_a_noop() {
         let mut conn = Connection::open_in_memory().unwrap();
         run(&mut conn).unwrap();
-        run(&mut conn).unwrap();   // should NOT replay migrations
-        let v: u32 = conn.pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
+        run(&mut conn).unwrap(); // should NOT replay migrations
+        let v: u32 = conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
         assert_eq!(v, MAX_SCHEMA_VERSION);
     }
 
     #[test]
     fn schema_too_new_errors() {
         let mut conn = Connection::open_in_memory().unwrap();
-        conn.pragma_update(None, "user_version", MAX_SCHEMA_VERSION + 5).unwrap();
+        conn.pragma_update(None, "user_version", MAX_SCHEMA_VERSION + 5)
+            .unwrap();
         let err = run(&mut conn).unwrap_err();
         match err {
             DbError::SchemaTooNew { found, max } => {

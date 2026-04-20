@@ -19,7 +19,7 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
-use tokio::time::{Duration, timeout};
+use tokio::time::{timeout, Duration};
 
 /// How the user responded to a confirmation prompt.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,7 +56,9 @@ pub struct PendingConfirmations {
 
 impl PendingConfirmations {
     pub fn new() -> Self {
-        Self { inner: Mutex::new(HashMap::new()) }
+        Self {
+            inner: Mutex::new(HashMap::new()),
+        }
     }
 
     /// Register a pending confirmation. Returns the receiver.
@@ -157,9 +159,12 @@ mod tests {
         let pending2 = std::sync::Arc::new(PendingConfirmations::new());
         let p2 = pending2.clone();
         // Use the original pending to send.
-        pending.resolve("req-3", Decision::DenyWithFeedback {
-            feedback: "Try a different approach".to_string(),
-        });
+        pending.resolve(
+            "req-3",
+            Decision::DenyWithFeedback {
+                feedback: "Try a different approach".to_string(),
+            },
+        );
         let decision = await_decision("req-3", rx, &pending).await;
         assert!(matches!(decision, Decision::DenyWithFeedback { .. }));
         let _ = p2; // suppress unused warning

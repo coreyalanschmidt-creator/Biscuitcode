@@ -60,16 +60,8 @@
           "gnome-keyring",
           "ollama"
         ],
-        "suggests": [
-          "rust-analyzer",
-          "typescript-language-server",
-          "pyright",
-          "gopls",
-          "clangd"
-        ],
         "section": "devel",
-        "maintainer": "Corey Alan Schmidt <coreyalanschmidt@gmail.com>",
-        "description": "An AI coding environment, served warm. VS Code-class editor with Claude, ChatGPT, and local Gemma 4 / Ollama models, built for Linux Mint 22 XFCE."
+        "priority": "optional"
       }
     }
   }

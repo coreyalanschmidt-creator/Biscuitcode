@@ -29,7 +29,6 @@ pub enum CatalogueError {
 
     // ----- Variants below are CLAIMED but not yet IMPLEMENTED. -----
     // Each owning phase fills in fields + helper constructors as it lands.
-
     /// Phase 3 — File op attempted outside the open workspace root.
     #[serde(rename = "E002")]
     #[error("E002 OutsideWorkspace: path {path} is not a descendant of the workspace root")]
@@ -183,23 +182,23 @@ impl CatalogueError {
     /// front-end discriminated-union dispatch.
     pub fn code(&self) -> &'static str {
         match self {
-            Self::KeyringMissing             => "E001",
-            Self::OutsideWorkspace { .. }    => "E002",
-            Self::PtyOpenFailed { .. }       => "E003",
-            Self::AnthropicAuthInvalid       => "E004",
+            Self::KeyringMissing => "E001",
+            Self::OutsideWorkspace { .. } => "E002",
+            Self::PtyOpenFailed { .. } => "E003",
+            Self::AnthropicAuthInvalid => "E004",
             Self::AnthropicNetworkError { .. } => "E005",
             Self::AnthropicRateLimited { .. } => "E006",
             Self::GemmaVersionFallback { .. } => "E007",
-            Self::WriteToolDenied { .. }     => "E008",
+            Self::WriteToolDenied { .. } => "E008",
             Self::ShellForbiddenPrefix { .. } => "E009",
-            Self::SnapshotFailed { .. }      => "E010",
-            Self::RewindFailed { .. }        => "E011",
-            Self::GitPushFailed { .. }       => "E012",
-            Self::LspServerMissing { .. }    => "E013",
-            Self::LspProtocolError { .. }    => "E014",
+            Self::SnapshotFailed { .. } => "E010",
+            Self::RewindFailed { .. } => "E011",
+            Self::GitPushFailed { .. } => "E012",
+            Self::LspServerMissing { .. } => "E013",
+            Self::LspProtocolError { .. } => "E014",
             Self::PreviewRenderFailed { .. } => "E015",
-            Self::FontLoadFailed { .. }      => "E016",
-            Self::UpdateCheckFailed { .. }   => "E017",
+            Self::FontLoadFailed { .. } => "E016",
+            Self::UpdateCheckFailed { .. } => "E017",
             Self::UpdateDownloadFailed { .. } => "E018",
         }
     }
@@ -218,34 +217,57 @@ mod tests {
             CatalogueError::PtyOpenFailed { reason: "x".into() }.code(),
             CatalogueError::AnthropicAuthInvalid.code(),
             CatalogueError::AnthropicNetworkError { reason: "x".into() }.code(),
-            CatalogueError::AnthropicRateLimited { retry_after_seconds: 1 }.code(),
+            CatalogueError::AnthropicRateLimited {
+                retry_after_seconds: 1,
+            }
+            .code(),
             CatalogueError::GemmaVersionFallback {
                 ollama_version: "0.19".into(),
                 fallback_model: "gemma3:4b".into(),
-            }.code(),
+            }
+            .code(),
             CatalogueError::WriteToolDenied {
                 tool_name: "write_file".into(),
                 path: "/x".into(),
-            }.code(),
-            CatalogueError::ShellForbiddenPrefix { command: "sudo".into() }.code(),
+            }
+            .code(),
+            CatalogueError::ShellForbiddenPrefix {
+                command: "sudo".into(),
+            }
+            .code(),
             CatalogueError::SnapshotFailed {
-                path: "/x".into(), reason: "x".into(),
-            }.code(),
+                path: "/x".into(),
+                reason: "x".into(),
+            }
+            .code(),
             CatalogueError::RewindFailed {
-                path: "/x".into(), reason: "x".into(),
-            }.code(),
-            CatalogueError::GitPushFailed { git_stderr: "x".into() }.code(),
+                path: "/x".into(),
+                reason: "x".into(),
+            }
+            .code(),
+            CatalogueError::GitPushFailed {
+                git_stderr: "x".into(),
+            }
+            .code(),
             CatalogueError::LspServerMissing {
                 language: "rust".into(),
                 install_command: "rustup".into(),
-            }.code(),
+            }
+            .code(),
             CatalogueError::LspProtocolError {
-                language: "rust".into(), reason: "x".into(),
-            }.code(),
+                language: "rust".into(),
+                reason: "x".into(),
+            }
+            .code(),
             CatalogueError::PreviewRenderFailed {
-                file: "x.md".into(), reason: "x".into(),
-            }.code(),
-            CatalogueError::FontLoadFailed { font_family: "Inter".into() }.code(),
+                file: "x.md".into(),
+                reason: "x".into(),
+            }
+            .code(),
+            CatalogueError::FontLoadFailed {
+                font_family: "Inter".into(),
+            }
+            .code(),
             CatalogueError::UpdateCheckFailed { reason: "x".into() }.code(),
             CatalogueError::UpdateDownloadFailed { reason: "x".into() }.code(),
         ];
@@ -258,8 +280,11 @@ mod tests {
         for c in &codes {
             assert_eq!(c.len(), 4, "code {} is not 4 chars", c);
             assert!(c.starts_with('E'), "code {} doesn't start with E", c);
-            assert!(c[1..].chars().all(|ch| ch.is_ascii_digit()),
-                "code {} non-digit suffix", c);
+            assert!(
+                c[1..].chars().all(|ch| ch.is_ascii_digit()),
+                "code {} non-digit suffix",
+                c
+            );
         }
     }
 

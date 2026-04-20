@@ -30,10 +30,10 @@ pub const SERVICE: &str = "biscuitcode";
 /// available. Runs `busctl --user list` and checks for the name.
 ///
 /// Returns:
-///   - `Ok(true)`  — Secret Service reachable; it's safe to call keyring ops.
-///   - `Ok(false)` — NOT reachable; onboarding must block and surface E001.
-///   - `Err(...)`  — `busctl` itself failed (should not happen — it's part
-///                   of systemd and verified by `bootstrap-wsl.sh`).
+/// - `Ok(true)`  — Secret Service reachable; it's safe to call keyring ops.
+/// - `Ok(false)` — NOT reachable; onboarding must block and surface E001.
+/// - `Err(...)`  — `busctl` itself failed (should not happen — it's part
+///   of systemd and verified by `bootstrap-wsl.sh`).
 pub fn secret_service_available() -> Result<bool, CatalogueError> {
     let output = Command::new("busctl")
         .args(["--user", "list", "--no-pager"])
@@ -55,16 +55,14 @@ pub fn secret_service_available() -> Result<bool, CatalogueError> {
 /// Requires [`secret_service_available`] returned `Ok(true)` for the
 /// current session. Call that BEFORE this; if false, surface E001.
 pub async fn set(service: &str, key: &str, value: &str) -> Result<(), CatalogueError> {
-    let entry = keyring::Entry::new(service, key)
-        .map_err(|_| CatalogueError::KeyringMissing)?;
+    let entry = keyring::Entry::new(service, key).map_err(|_| CatalogueError::KeyringMissing)?;
     entry.set_password(value).map_err(keyring_err_to_catalogue)
 }
 
 /// Retrieve a secret. Returns `Ok(None)` when the key is absent;
 /// `Err(KeyringMissing)` when the Secret Service itself is down.
 pub async fn get(service: &str, key: &str) -> Result<Option<String>, CatalogueError> {
-    let entry = keyring::Entry::new(service, key)
-        .map_err(|_| CatalogueError::KeyringMissing)?;
+    let entry = keyring::Entry::new(service, key).map_err(|_| CatalogueError::KeyringMissing)?;
     match entry.get_password() {
         Ok(v) => Ok(Some(v)),
         Err(keyring::Error::NoEntry) => Ok(None),
@@ -74,8 +72,7 @@ pub async fn get(service: &str, key: &str) -> Result<Option<String>, CatalogueEr
 
 /// Delete a secret. No-op if the key didn't exist (idempotent).
 pub async fn delete(service: &str, key: &str) -> Result<(), CatalogueError> {
-    let entry = keyring::Entry::new(service, key)
-        .map_err(|_| CatalogueError::KeyringMissing)?;
+    let entry = keyring::Entry::new(service, key).map_err(|_| CatalogueError::KeyringMissing)?;
     match entry.delete_credential() {
         Ok(()) => Ok(()),
         Err(keyring::Error::NoEntry) => Ok(()),

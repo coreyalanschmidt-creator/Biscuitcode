@@ -156,8 +156,7 @@ pub fn run() {
 /// allowing API-key entry.
 #[tauri::command]
 fn check_secret_service() -> Result<bool, String> {
-    biscuitcode_core::secrets::secret_service_available()
-        .map_err(|e| e.to_string())
+    biscuitcode_core::secrets::secret_service_available().map_err(|e| e.to_string())
 }
 
 /// Development helper: emit a mock E001 error to the frontend so the

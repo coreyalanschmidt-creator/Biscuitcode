@@ -20,7 +20,7 @@ use biscuitcode_core::secrets;
 use biscuitcode_db::{ConversationId, Database, MessageId, WorkspaceId};
 use biscuitcode_providers::{
     AnthropicProvider, ChatEvent, ChatOptions, ContentBlock, Message, MessageRole, ModelInfo,
-    ModelProvider, Role, ToolSpec, Usage,
+    ModelProvider, Role, Usage,
 };
 
 // ---------- State types ----------
@@ -38,10 +38,10 @@ pub struct ChatDb(pub Mutex<Option<Database>>);
 /// Never returns the key itself.
 #[tauri::command]
 pub async fn anthropic_key_present() -> bool {
-    match secrets::get(secrets::SERVICE, "anthropic_api_key").await {
-        Ok(Some(_)) => true,
-        _ => false,
-    }
+    matches!(
+        secrets::get(secrets::SERVICE, "anthropic_api_key").await,
+        Ok(Some(_))
+    )
 }
 
 /// Store an Anthropic API key in libsecret.
@@ -51,8 +51,8 @@ pub async fn anthropic_key_present() -> bool {
 #[tauri::command]
 pub async fn anthropic_set_key(key: String) -> Result<(), String> {
     // Pre-flight: never activate the daemon unless it's already up.
-    let available = biscuitcode_core::secrets::secret_service_available()
-        .map_err(|e| e.to_string())?;
+    let available =
+        biscuitcode_core::secrets::secret_service_available().map_err(|e| e.to_string())?;
     if !available {
         return Err("E001".to_string());
     }
@@ -246,7 +246,10 @@ pub async fn chat_send(
 ) -> Result<(), String> {
     let conv_id = ConversationId(req.conversation_id.clone());
     let _ws_id = WorkspaceId(req.workspace_id.clone());
-    let parent_id = req.parent_message_id.as_deref().map(|s| MessageId(s.to_string()));
+    let parent_id = req
+        .parent_message_id
+        .as_deref()
+        .map(|s| MessageId(s.to_string()));
 
     // Ensure workspace exists.
     {
@@ -266,7 +269,9 @@ pub async fn chat_send(
                 parent_id.as_ref(),
                 MessageRole::User,
                 "",
-                &[ContentBlock::Text { text: req.text.clone() }],
+                &[ContentBlock::Text {
+                    text: req.text.clone(),
+                }],
                 &[],
                 &[],
                 None,
@@ -334,10 +339,7 @@ pub async fn chat_send(
         };
 
         // Cache root for snapshots: ~/.cache/biscuitcode/
-        let cache_root = app
-            .path()
-            .app_cache_dir()
-            .map_err(|e| e.to_string())?;
+        let cache_root = app.path().app_cache_dir().map_err(|e| e.to_string())?;
 
         // Workspace trust from settings (best-effort read from localStorage-like value;
         // for now, default to false — the confirmation gate handles all write/shell tools).
@@ -346,7 +348,13 @@ pub async fn chat_send(
         let app_clone = app.clone();
         let event_channel_clone = event_channel.clone();
 
-        let emit_confirm: Arc<dyn Fn(biscuitcode_agent::executor::confirmation::ConfirmationRequest) -> Result<(), String> + Send + Sync> = {
+        let emit_confirm: Arc<
+            dyn Fn(
+                    biscuitcode_agent::executor::confirmation::ConfirmationRequest,
+                ) -> Result<(), String>
+                + Send
+                + Sync,
+        > = {
             let app2 = app.clone();
             Arc::new(move |req| {
                 app2.emit("biscuitcode:confirm-request", &req)
@@ -367,8 +375,8 @@ pub async fn chat_send(
         });
 
         let registry = Arc::new(biscuitcode_agent::tools::ToolRegistry::full_default());
-        let executor = ReActExecutor::new(registry, workspace_root, conv_id.clone())
-            .with_context(exec_ctx);
+        let executor =
+            ReActExecutor::new(registry, workspace_root, conv_id.clone()).with_context(exec_ctx);
 
         let original_msg_count = messages.len();
         let provider_arc: Arc<dyn ModelProvider> = Arc::new(provider);
@@ -439,10 +447,7 @@ pub async fn chat_send(
             let event = match item {
                 Ok(e) => e,
                 Err(e) => {
-                    let _ = app.emit(
-                        &event_channel,
-                        ChatEventPayload::from_err(e.to_string()),
-                    );
+                    let _ = app.emit(&event_channel, ChatEventPayload::from_err(e.to_string()));
                     break;
                 }
             };
@@ -460,7 +465,9 @@ pub async fn chat_send(
                 let content = if assistant_text.is_empty() {
                     vec![]
                 } else {
-                    vec![ContentBlock::Text { text: assistant_text.clone() }]
+                    vec![ContentBlock::Text {
+                        text: assistant_text.clone(),
+                    }]
                 };
                 let mut guard = state.0.lock().map_err(|_| "db lock poisoned")?;
                 if let Some(db) = guard.as_mut() {
@@ -578,7 +585,11 @@ impl ChatEventPayload {
                 usage: Some(UsageDto::from(*usage)),
                 ..Self::empty()
             },
-            ChatEvent::Error { code, message, recoverable } => Self {
+            ChatEvent::Error {
+                code,
+                message,
+                recoverable,
+            } => Self {
                 event_type: "error".into(),
                 code: Some(code.clone()),
                 message: Some(message.clone()),
@@ -701,21 +712,51 @@ pub async fn chat_inline_edit(
     while let Some(item) = stream.next().await {
         match item {
             Ok(ChatEvent::TextDelta { text }) => {
-                let _ = app.emit(&event_channel, DeltaPayload { delta: Some(text), done: false, error: None });
+                let _ = app.emit(
+                    &event_channel,
+                    DeltaPayload {
+                        delta: Some(text),
+                        done: false,
+                        error: None,
+                    },
+                );
             }
             Ok(ChatEvent::Done { .. }) => {
-                let _ = app.emit(&event_channel, DeltaPayload { delta: None, done: true, error: None });
+                let _ = app.emit(
+                    &event_channel,
+                    DeltaPayload {
+                        delta: None,
+                        done: true,
+                        error: None,
+                    },
+                );
                 break;
             }
-            Ok(ChatEvent::Error { message, recoverable, .. }) => {
-                if !recoverable {
-                    let _ = app.emit(&event_channel, DeltaPayload { delta: None, done: true, error: Some(message.clone()) });
-                    return Err(message);
-                }
+            Ok(ChatEvent::Error {
+                message,
+                recoverable,
+                ..
+            }) if !recoverable => {
+                let _ = app.emit(
+                    &event_channel,
+                    DeltaPayload {
+                        delta: None,
+                        done: true,
+                        error: Some(message.clone()),
+                    },
+                );
+                return Err(message);
             }
             Err(e) => {
                 let msg = e.to_string();
-                let _ = app.emit(&event_channel, DeltaPayload { delta: None, done: true, error: Some(msg.clone()) });
+                let _ = app.emit(
+                    &event_channel,
+                    DeltaPayload {
+                        delta: None,
+                        done: true,
+                        error: Some(msg.clone()),
+                    },
+                );
                 return Err(msg);
             }
             _ => {}

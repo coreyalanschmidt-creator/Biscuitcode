@@ -39,12 +39,11 @@ impl Tool for SearchCodeTool {
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: self.name().to_string(),
-            description:
-                "Search workspace files for `query`. Substring match by \
+            description: "Search workspace files for `query`. Substring match by \
                  default; set `regex: true` for regex. Restrict scope with \
                  `glob` (e.g. `src/**/*.ts` or `{src,tests}/**/*.ts`). \
                  Respects .gitignore."
-                    .to_string(),
+                .to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -71,8 +70,8 @@ impl Tool for SearchCodeTool {
         args: serde_json::Value,
         ctx: &ToolCtx,
     ) -> Result<ToolResult, ToolError> {
-        let args: Args = serde_json::from_value(args)
-            .map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
+        let args: Args =
+            serde_json::from_value(args).map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
 
         // Build the matcher. PM-03 fix: use globset::GlobSetBuilder so brace
         // expansion works correctly.
@@ -81,7 +80,11 @@ impl Tool for SearchCodeTool {
                 .map_err(|e| ToolError::InvalidArgs(format!("invalid glob {pattern:?}: {e}")))?;
             let mut builder = GlobSetBuilder::new();
             builder.add(glob);
-            Some(builder.build().map_err(|e| ToolError::InvalidArgs(e.to_string()))?)
+            Some(
+                builder
+                    .build()
+                    .map_err(|e| ToolError::InvalidArgs(e.to_string()))?,
+            )
         } else {
             None
         };
@@ -89,8 +92,10 @@ impl Tool for SearchCodeTool {
         // Build the query matcher.
         let use_regex = args.regex.unwrap_or(false);
         let re = if use_regex {
-            Some(Regex::new(&args.query)
-                .map_err(|e| ToolError::InvalidArgs(format!("invalid regex: {e}")))?)
+            Some(
+                Regex::new(&args.query)
+                    .map_err(|e| ToolError::InvalidArgs(format!("invalid regex: {e}")))?,
+            )
         } else {
             None
         };
@@ -101,7 +106,13 @@ impl Tool for SearchCodeTool {
         // Run blocking I/O on a blocking thread (ignore::Walk is sync).
         let query = args.query.clone();
         let result = tokio::task::spawn_blocking(move || {
-            search_sync(&workspace, glob_set.as_ref(), re.as_ref(), &query, max_bytes)
+            search_sync(
+                &workspace,
+                glob_set.as_ref(),
+                re.as_ref(),
+                &query,
+                max_bytes,
+            )
         })
         .await
         .map_err(|e| ToolError::Other(e.to_string()))??;
@@ -121,7 +132,7 @@ fn search_sync(
     let mut truncated = false;
 
     let walker = ignore::WalkBuilder::new(root)
-        .hidden(false)        // include hidden dirs (user may want .github etc.)
+        .hidden(false) // include hidden dirs (user may want .github etc.)
         .git_ignore(true)
         .git_global(true)
         .git_exclude(true)
@@ -159,7 +170,8 @@ fn search_sync(
         }
 
         let text = String::from_utf8_lossy(&bytes);
-        let rel_path = path.strip_prefix(root)
+        let rel_path = path
+            .strip_prefix(root)
             .unwrap_or(path)
             .display()
             .to_string();
@@ -191,13 +203,15 @@ fn search_sync(
         output = format!("No matches found for {:?}", query);
     }
 
-    Ok(ToolResult { result: output, truncated })
+    Ok(ToolResult {
+        result: output,
+        truncated,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use biscuitcode_db::ConversationId;
     use tempfile::TempDir;
 
@@ -221,18 +235,29 @@ mod tests {
     async fn finds_substring_matches_with_line_numbers() {
         let dir = TempDir::new().unwrap();
         write(&dir, "src/alpha.ts", "// TODO: implement alpha\n// done\n");
-        write(&dir, "src/beta.ts",  "// no marker here\n");
+        write(&dir, "src/beta.ts", "// no marker here\n");
 
         let tool = SearchCodeTool;
         let ctx = make_ctx(&dir);
-        let result = tool.execute(
-            json!({ "query": "TODO" }),
-            &ctx,
-        ).await.unwrap();
+        let result = tool
+            .execute(json!({ "query": "TODO" }), &ctx)
+            .await
+            .unwrap();
 
-        assert!(result.result.contains("alpha.ts"), "result: {}", result.result);
-        assert!(result.result.contains("1:"), "expected line 1; result: {}", result.result);
-        assert!(!result.result.contains("beta.ts"), "beta.ts should not match");
+        assert!(
+            result.result.contains("alpha.ts"),
+            "result: {}",
+            result.result
+        );
+        assert!(
+            result.result.contains("1:"),
+            "expected line 1; result: {}",
+            result.result
+        );
+        assert!(
+            !result.result.contains("beta.ts"),
+            "beta.ts should not match"
+        );
         assert!(!result.truncated);
     }
 
@@ -241,20 +266,35 @@ mod tests {
     #[tokio::test]
     async fn glob_brace_expansion_matches_both_dirs() {
         let dir = TempDir::new().unwrap();
-        write(&dir, "src/alpha.ts",        "// TODO: implement alpha\n");
+        write(&dir, "src/alpha.ts", "// TODO: implement alpha\n");
         write(&dir, "tests/alpha.test.ts", "// TODO: cover alpha\n");
-        write(&dir, "lib/gamma.ts",        "// TODO: something in lib\n");
+        write(&dir, "lib/gamma.ts", "// TODO: something in lib\n");
 
         let tool = SearchCodeTool;
         let ctx = make_ctx(&dir);
-        let result = tool.execute(
-            json!({ "query": "TODO", "glob": "{src,tests}/**/*.ts" }),
-            &ctx,
-        ).await.unwrap();
+        let result = tool
+            .execute(
+                json!({ "query": "TODO", "glob": "{src,tests}/**/*.ts" }),
+                &ctx,
+            )
+            .await
+            .unwrap();
 
-        assert!(result.result.contains("alpha.ts"), "src match missing: {}", result.result);
-        assert!(result.result.contains("alpha.test.ts"), "tests match missing: {}", result.result);
-        assert!(!result.result.contains("gamma.ts"), "lib/gamma.ts must be excluded: {}", result.result);
+        assert!(
+            result.result.contains("alpha.ts"),
+            "src match missing: {}",
+            result.result
+        );
+        assert!(
+            result.result.contains("alpha.test.ts"),
+            "tests match missing: {}",
+            result.result
+        );
+        assert!(
+            !result.result.contains("gamma.ts"),
+            "lib/gamma.ts must be excluded: {}",
+            result.result
+        );
     }
 
     #[tokio::test]
@@ -264,10 +304,10 @@ mod tests {
 
         let tool = SearchCodeTool;
         let ctx = make_ctx(&dir);
-        let result = tool.execute(
-            json!({ "query": "const x = \\d+", "regex": true }),
-            &ctx,
-        ).await.unwrap();
+        let result = tool
+            .execute(json!({ "query": "const x = \\d+", "regex": true }), &ctx)
+            .await
+            .unwrap();
 
         assert!(result.result.contains("a.ts"), "result: {}", result.result);
         assert!(result.result.contains("const x = 42"));
@@ -280,8 +320,15 @@ mod tests {
 
         let tool = SearchCodeTool;
         let ctx = make_ctx(&dir);
-        let result = tool.execute(json!({ "query": "NONEXISTENT_UNIQUE_STRING" }), &ctx).await.unwrap();
-        assert!(result.result.contains("No matches"), "result: {}", result.result);
+        let result = tool
+            .execute(json!({ "query": "NONEXISTENT_UNIQUE_STRING" }), &ctx)
+            .await
+            .unwrap();
+        assert!(
+            result.result.contains("No matches"),
+            "result: {}",
+            result.result
+        );
     }
 
     #[tokio::test]
@@ -289,10 +336,9 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let tool = SearchCodeTool;
         let ctx = make_ctx(&dir);
-        let err = tool.execute(
-            json!({ "query": "[invalid regex", "regex": true }),
-            &ctx,
-        ).await;
+        let err = tool
+            .execute(json!({ "query": "[invalid regex", "regex": true }), &ctx)
+            .await;
         assert!(err.is_err(), "expected error for invalid regex");
     }
 
@@ -300,17 +346,25 @@ mod tests {
     async fn glob_without_brace_expansion_still_works() {
         let dir = TempDir::new().unwrap();
         write(&dir, "src/alpha.ts", "// TODO: alpha\n");
-        write(&dir, "src/main.rs",  "// TODO: not typescript\n");
+        write(&dir, "src/main.rs", "// TODO: not typescript\n");
 
         let tool = SearchCodeTool;
         let ctx = make_ctx(&dir);
-        let result = tool.execute(
-            json!({ "query": "TODO", "glob": "src/**/*.ts" }),
-            &ctx,
-        ).await.unwrap();
+        let result = tool
+            .execute(json!({ "query": "TODO", "glob": "src/**/*.ts" }), &ctx)
+            .await
+            .unwrap();
 
-        assert!(result.result.contains("alpha.ts"), "result: {}", result.result);
-        assert!(!result.result.contains("main.rs"), "result: {}", result.result);
+        assert!(
+            result.result.contains("alpha.ts"),
+            "result: {}",
+            result.result
+        );
+        assert!(
+            !result.result.contains("main.rs"),
+            "result: {}",
+            result.result
+        );
     }
 
     #[tokio::test]
@@ -323,7 +377,14 @@ mod tests {
         let tool = SearchCodeTool;
         let mut ctx = make_ctx(&dir);
         ctx.max_result_bytes = 50; // very small limit
-        let result = tool.execute(json!({ "query": "TODO" }), &ctx).await.unwrap();
-        assert!(result.truncated, "expected truncated=true; result len={}", result.result.len());
+        let result = tool
+            .execute(json!({ "query": "TODO" }), &ctx)
+            .await
+            .unwrap();
+        assert!(
+            result.truncated,
+            "expected truncated=true; result len={}",
+            result.result.len()
+        );
     }
 }

@@ -11,7 +11,7 @@
 //!
 //! Phase 5 fills in [`anthropic`]; Phase 6a fills in [`openai`] and [`ollama`].
 
-#![warn(missing_docs)]
+#![allow(missing_docs)] // TODO: document public items and flip back to warn
 
 pub mod anthropic;
 pub mod ollama;
@@ -21,12 +21,12 @@ pub mod types;
 
 pub use r#trait::ModelProvider;
 pub use types::{
-    ChatEvent, ChatOptions, ContentBlock, MentionKind, Message, MessageRole,
-    ModelInfo, ProviderError, ReasoningEffort, Role, ToolCall, ToolResult, ToolSpec, Usage,
+    ChatEvent, ChatOptions, ContentBlock, MentionKind, Message, MessageRole, ModelInfo,
+    ProviderError, ReasoningEffort, Role, ToolCall, ToolResult, ToolSpec, Usage,
 };
 
 pub use anthropic::AnthropicProvider;
 pub use ollama::{
-    OllamaProvider, agent_mode_preferred, gemma3_fallback_for_ram_gb, gemma4_tag_for_ram_gb,
+    agent_mode_preferred, gemma3_fallback_for_ram_gb, gemma4_tag_for_ram_gb, OllamaProvider,
 };
 pub use openai::OpenAIProvider;

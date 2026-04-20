@@ -50,7 +50,10 @@ pub struct ToolResult {
 
 impl ToolResult {
     pub fn text(s: impl Into<String>) -> Self {
-        Self { result: s.into(), truncated: false }
+        Self {
+            result: s.into(),
+            truncated: false,
+        }
     }
 }
 
@@ -104,7 +107,9 @@ pub struct ToolRegistry {
 
 impl ToolRegistry {
     pub fn new() -> Self {
-        Self { tools: HashMap::new() }
+        Self {
+            tools: HashMap::new(),
+        }
     }
 
     /// Register a tool. Replaces any previously-registered tool with the

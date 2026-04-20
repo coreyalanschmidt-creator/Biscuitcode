@@ -225,11 +225,7 @@ pub fn git_log(
     let n = limit.unwrap_or(20).to_string();
     let out = run_git(
         &root,
-        &[
-            "log",
-            &format!("-{}", n),
-            "--pretty=format:%h|%s|%an|%ar",
-        ],
+        &["log", &format!("-{}", n), "--pretty=format:%h|%s|%an|%ar"],
     )?;
     let entries = out
         .lines()
@@ -257,15 +253,16 @@ pub fn git_branches(workspace: State<'_, WorkspaceState>) -> Result<Vec<String>,
         .clone()
         .ok_or_else(|| "no workspace open".to_string())?;
     let out = run_git(root.as_path(), &["branch", "--format=%(refname:short)"])?;
-    Ok(out.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect())
+    Ok(out
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect())
 }
 
 /// Switch to a branch.
 #[tauri::command]
-pub fn git_checkout(
-    branch: String,
-    workspace: State<'_, WorkspaceState>,
-) -> Result<(), String> {
+pub fn git_checkout(branch: String, workspace: State<'_, WorkspaceState>) -> Result<(), String> {
     let root = workspace
         .0
         .lock()
@@ -312,17 +309,7 @@ pub fn git_blame(
         .clone()
         .ok_or_else(|| "no workspace open".to_string())?;
     let range = format!("{},{}", start_line, end_line);
-    let out = run_git(
-        &root,
-        &[
-            "blame",
-            "--porcelain",
-            "-L",
-            &range,
-            "--",
-            &path,
-        ],
-    )?;
+    let out = run_git(&root, &["blame", "--porcelain", "-L", &range, "--", &path])?;
     parse_blame_porcelain(&out, start_line)
 }
 
@@ -358,14 +345,14 @@ fn parse_blame_porcelain(output: &str, start_line: u32) -> Result<Vec<GitBlameLi
                 relative_date: current_date.clone(),
             });
             current_line += 1;
-        } else if line.starts_with("author ") {
-            current_author = line["author ".len()..].to_string();
-        } else if line.starts_with("author-time ") {
+        } else if let Some(rest) = line.strip_prefix("author ") {
+            current_author = rest.to_string();
+        } else if let Some(rest) = line.strip_prefix("author-time ") {
             // Convert unix timestamp to relative string.
-            if let Ok(ts) = line["author-time ".len()..].parse::<i64>() {
+            if let Ok(ts) = rest.parse::<i64>() {
                 current_date = relative_time(ts);
             }
-        } else if line.len() >= 40 && line.chars().next().map(|c| c.is_ascii_hexdigit()).unwrap_or(false) {
+        } else if line.len() >= 40 && line.chars().next().is_some_and(|c| c.is_ascii_hexdigit()) {
             // Commit hash line: "<hash> <orig_line> <final_line> <num_lines>"
             current_hash = line.split_whitespace().next().unwrap_or("").to_string();
         }

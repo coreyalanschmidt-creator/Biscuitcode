@@ -124,7 +124,7 @@ impl PtyRegistry {
     where
         F: Fn(Vec<u8>) + Send + 'static,
     {
-        let id = session_id.unwrap_or_else(SessionId::new);
+        let id = session_id.unwrap_or_default();
 
         // 1. Open the PTY pair.
         let pty_system = native_pty_system();
@@ -220,12 +220,7 @@ impl PtyRegistry {
     ///
     /// Must be called when the frontend resizes the panel so that
     /// `tput lines` / `tput cols` report accurate values.
-    pub fn resize(
-        &self,
-        session_id: &SessionId,
-        rows: u16,
-        cols: u16,
-    ) -> Result<(), PtyError> {
+    pub fn resize(&self, session_id: &SessionId, rows: u16, cols: u16) -> Result<(), PtyError> {
         let mut sessions = self.sessions.write();
         let session = sessions
             .get_mut(session_id)
@@ -371,9 +366,8 @@ mod tests {
         let shell = detect_shell();
         // Should return something non-empty; exact value depends on host.
         assert!(!shell.is_empty(), "shell fallback must not be empty");
-        match prev {
-            Some(p) => unsafe { std::env::set_var("SHELL", p) },
-            None => {}
+        if let Some(p) = prev {
+            unsafe { std::env::set_var("SHELL", p) }
         }
     }
 
@@ -397,16 +391,9 @@ mod tests {
         let recv_clone = received.clone();
 
         let id = registry
-            .open(
-                shell,
-                std::env::temp_dir(),
-                24,
-                80,
-                None,
-                move |chunk| {
-                    recv_clone.write().push(chunk);
-                },
-            )
+            .open(shell, std::env::temp_dir(), 24, 80, None, move |chunk| {
+                recv_clone.write().push(chunk);
+            })
             .expect("open should succeed");
 
         // The session should now be in the map.
@@ -437,17 +424,12 @@ mod tests {
         let shell = detect_shell();
 
         let id = registry
-            .open(
-                shell,
-                std::env::temp_dir(),
-                24,
-                80,
-                None,
-                |_| {},
-            )
+            .open(shell, std::env::temp_dir(), 24, 80, None, |_| {})
             .expect("open should succeed");
 
-        registry.resize(&id, 40, 120).expect("resize should succeed");
+        registry
+            .resize(&id, 40, 120)
+            .expect("resize should succeed");
 
         {
             let sessions = registry.sessions.read();

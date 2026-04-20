@@ -26,10 +26,9 @@ impl Tool for ReadFileTool {
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: self.name().to_string(),
-            description:
-                "Read the contents of a file in the workspace. Returns text \
+            description: "Read the contents of a file in the workspace. Returns text \
                  (UTF-8). Files larger than 256 KB are truncated."
-                    .to_string(),
+                .to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -57,8 +56,8 @@ impl Tool for ReadFileTool {
         args: serde_json::Value,
         ctx: &ToolCtx,
     ) -> Result<ToolResult, ToolError> {
-        let args: Args = serde_json::from_value(args)
-            .map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
+        let args: Args =
+            serde_json::from_value(args).map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
 
         let p = resolve(&ctx.workspace_root, &args.path);
         if !ctx.is_inside_workspace(&p) {
@@ -75,7 +74,10 @@ impl Tool for ReadFileTool {
         // gets a clear signal rather than crashing.
         let text = String::from_utf8_lossy(&bytes).into_owned();
 
-        Ok(ToolResult { result: text, truncated })
+        Ok(ToolResult {
+            result: text,
+            truncated,
+        })
     }
 }
 
@@ -110,7 +112,10 @@ mod tests {
 
         let tool = ReadFileTool;
         let ctx = make_ctx(&dir);
-        let result = tool.execute(json!({ "path": "hello.txt" }), &ctx).await.unwrap();
+        let result = tool
+            .execute(json!({ "path": "hello.txt" }), &ctx)
+            .await
+            .unwrap();
         assert_eq!(result.result, "hello world");
         assert!(!result.truncated);
     }
@@ -133,7 +138,10 @@ mod tests {
         let tool = ReadFileTool;
         let mut ctx = make_ctx(&dir);
         ctx.max_result_bytes = 100;
-        let result = tool.execute(json!({ "path": "big.txt" }), &ctx).await.unwrap();
+        let result = tool
+            .execute(json!({ "path": "big.txt" }), &ctx)
+            .await
+            .unwrap();
         assert!(result.truncated);
         assert_eq!(result.result.len(), 100);
     }
@@ -146,7 +154,9 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let tool = ReadFileTool;
         let ctx = make_ctx(&dir);
-        let err = tool.execute(json!({ "path": "nonexistent.txt" }), &ctx).await;
+        let err = tool
+            .execute(json!({ "path": "nonexistent.txt" }), &ctx)
+            .await;
         assert!(err.is_err(), "expected error for nonexistent file");
     }
 }

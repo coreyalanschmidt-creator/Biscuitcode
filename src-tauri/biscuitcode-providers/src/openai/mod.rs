@@ -67,28 +67,44 @@ impl OpenAIProvider {
             .pool_idle_timeout(std::time::Duration::from_secs(60))
             .build()
             .expect("reqwest client construction is infallible with default config");
-        Self { api_key, client, base_url }
+        Self {
+            api_key,
+            client,
+            base_url,
+        }
     }
 }
 
 #[async_trait]
 impl ModelProvider for OpenAIProvider {
-    fn id(&self) -> &'static str { "openai" }
-    fn display_name(&self) -> &'static str { "OpenAI" }
-    fn supports_tools(&self) -> bool { true }
-    fn supports_vision(&self) -> bool { true }
-    fn supports_thinking(&self) -> bool { true } // reasoning models surface this
-    fn supports_prompt_caching(&self) -> bool { false } // automatic, not user-controllable
+    fn id(&self) -> &'static str {
+        "openai"
+    }
+    fn display_name(&self) -> &'static str {
+        "OpenAI"
+    }
+    fn supports_tools(&self) -> bool {
+        true
+    }
+    fn supports_vision(&self) -> bool {
+        true
+    }
+    fn supports_thinking(&self) -> bool {
+        true
+    } // reasoning models surface this
+    fn supports_prompt_caching(&self) -> bool {
+        false
+    } // automatic, not user-controllable
 
     async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError> {
         // Curated set per the synthesis. Reasoning models flagged so the
         // chat panel exempts them from the TTFT gate.
         Ok(vec![
-            mi("gpt-5.4-mini",      "GPT-5.4 mini",                      false, false),
-            mi("gpt-5.4",           "GPT-5.4",                            false, false),
-            mi("gpt-5.4-nano",      "GPT-5.4 nano",                       false, false),
-            mi("gpt-5.4-pro",       "GPT-5.4 pro (reasoning)",            true,  false),
-            mi("gpt-5.3-instant",   "GPT-5.3 Instant",                    false, false),
+            mi("gpt-5.4-mini", "GPT-5.4 mini", false, false),
+            mi("gpt-5.4", "GPT-5.4", false, false),
+            mi("gpt-5.4-nano", "GPT-5.4 nano", false, false),
+            mi("gpt-5.4-pro", "GPT-5.4 pro (reasoning)", true, false),
+            mi("gpt-5.3-instant", "GPT-5.3 Instant", false, false),
             // Legacy entries — visible in picker, marked legacy.
             ModelInfo {
                 id: "gpt-5.2-thinking".to_string(),
@@ -106,10 +122,8 @@ impl ModelProvider for OpenAIProvider {
         messages: Vec<Message>,
         tools: Vec<ToolSpec>,
         opts: ChatOptions,
-    ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<ChatEvent, ProviderError>> + Send>>,
-        ProviderError,
-    > {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatEvent, ProviderError>> + Send>>, ProviderError>
+    {
         let body = build_request_body(&messages, &tools, &opts);
         debug!(model = %opts.model, "openai chat_stream request");
 
@@ -121,7 +135,9 @@ impl ModelProvider for OpenAIProvider {
             .json(&body)
             .send()
             .await
-            .map_err(|e| ProviderError::Network { reason: e.to_string() })?;
+            .map_err(|e| ProviderError::Network {
+                reason: e.to_string(),
+            })?;
 
         let status = resp.status();
         if status == 401 {
@@ -134,15 +150,23 @@ impl ModelProvider for OpenAIProvider {
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(60);
-            return Err(ProviderError::RateLimited { retry_after_seconds: retry_after });
+            return Err(ProviderError::RateLimited {
+                retry_after_seconds: retry_after,
+            });
         }
         if status.is_server_error() {
             let msg = resp.text().await.unwrap_or_default();
-            return Err(ProviderError::ServerError { status: status.as_u16(), message: msg });
+            return Err(ProviderError::ServerError {
+                status: status.as_u16(),
+                message: msg,
+            });
         }
         if status.is_client_error() {
             let msg = resp.text().await.unwrap_or_default();
-            return Err(ProviderError::BadRequest { status: status.as_u16(), message: msg });
+            return Err(ProviderError::BadRequest {
+                status: status.as_u16(),
+                message: msg,
+            });
         }
 
         let byte_stream = resp.bytes_stream();
@@ -210,7 +234,7 @@ impl ModelProvider for OpenAIProvider {
                 if let Some(tcs) = delta["tool_calls"].as_array() {
                     for tc_delta in tcs {
                         let idx = tc_delta["index"].as_u64().unwrap_or(0) as usize;
-                        let entry = accums.entry(idx).or_insert_with(ToolCallAccum::default);
+                        let entry = accums.entry(idx).or_default();
 
                         // id and name only arrive on the first delta for each index.
                         if let Some(id) = tc_delta["id"].as_str() {
@@ -294,16 +318,19 @@ pub(crate) fn build_request_body(
     });
 
     if !tools.is_empty() {
-        let tools_arr: Vec<Value> = tools.iter().map(|t| {
-            json!({
-                "type": "function",
-                "function": {
-                    "name": t.name,
-                    "description": t.description,
-                    "parameters": t.input_schema,
-                }
+        let tools_arr: Vec<Value> = tools
+            .iter()
+            .map(|t| {
+                json!({
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.input_schema,
+                    }
+                })
             })
-        }).collect();
+            .collect();
         body["tools"] = json!(tools_arr);
         body["tool_choice"] = json!("auto");
     }
@@ -319,9 +346,9 @@ pub(crate) fn build_request_body(
     // reasoning_effort → OpenAI's `reasoning_effort` field (for o-class / reasoning models).
     if let Some(re) = &opts.reasoning_effort {
         let effort_str = match re {
-            crate::types::ReasoningEffort::Low    => "low",
+            crate::types::ReasoningEffort::Low => "low",
             crate::types::ReasoningEffort::Medium => "medium",
-            crate::types::ReasoningEffort::High   => "high",
+            crate::types::ReasoningEffort::High => "high",
         };
         body["reasoning_effort"] = json!(effort_str);
     }
@@ -347,35 +374,61 @@ fn encode_message(msg: &Message) -> Value {
         Role::Assistant => {
             let mut obj = json!({ "role": "assistant" });
 
-            let text: String = msg.content.iter().filter_map(|b| {
-                if let ContentBlock::Text { text } = b { Some(text.as_str()) } else { None }
-            }).collect::<Vec<_>>().join("");
+            let text: String = msg
+                .content
+                .iter()
+                .filter_map(|b| {
+                    if let ContentBlock::Text { text } = b {
+                        Some(text.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("");
 
             if !text.is_empty() {
                 obj["content"] = json!(text);
             }
 
             if !msg.tool_calls.is_empty() {
-                let tcs: Vec<Value> = msg.tool_calls.iter().map(|tc| {
-                    let args: Value = serde_json::from_str(&tc.args_json).unwrap_or(Value::Null);
-                    json!({
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.name,
-                            "arguments": serde_json::to_string(&args).unwrap_or_default(),
-                        }
+                let tcs: Vec<Value> = msg
+                    .tool_calls
+                    .iter()
+                    .map(|tc| {
+                        let args: Value =
+                            serde_json::from_str(&tc.args_json).unwrap_or(Value::Null);
+                        json!({
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.name,
+                                "arguments": serde_json::to_string(&args).unwrap_or_default(),
+                            }
+                        })
                     })
-                }).collect();
+                    .collect();
                 obj["tool_calls"] = json!(tcs);
             }
             obj
         }
         Role::User | Role::System => {
-            let text: String = msg.content.iter().filter_map(|b| {
-                if let ContentBlock::Text { text } = b { Some(text.as_str()) } else { None }
-            }).collect::<Vec<_>>().join("");
-            let role = match msg.role { Role::System => "system", _ => "user" };
+            let text: String = msg
+                .content
+                .iter()
+                .filter_map(|b| {
+                    if let ContentBlock::Text { text } = b {
+                        Some(text.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("");
+            let role = match msg.role {
+                Role::System => "system",
+                _ => "user",
+            };
             json!({ "role": role, "content": text })
         }
     }
@@ -383,10 +436,10 @@ fn encode_message(msg: &Message) -> Value {
 
 fn normalize_stop_reason(reason: &str) -> String {
     match reason {
-        "stop"       => "end_turn".to_string(),
+        "stop" => "end_turn".to_string(),
         "tool_calls" => "tool_use".to_string(),
-        "length"     => "max_tokens".to_string(),
-        other        => other.to_string(),
+        "length" => "max_tokens".to_string(),
+        other => other.to_string(),
     }
 }
 
@@ -444,7 +497,10 @@ mod tests {
     /// No tools field when tools is empty.
     #[test]
     fn build_request_body_no_tools_omits_tools_key() {
-        let opts = ChatOptions { model: "gpt-5.4-mini".into(), ..Default::default() };
+        let opts = ChatOptions {
+            model: "gpt-5.4-mini".into(),
+            ..Default::default()
+        };
         let body = build_request_body(&[], &[], &opts);
         assert!(body.get("tools").is_none());
         assert!(body.get("tool_choice").is_none());
@@ -483,7 +539,10 @@ mod tests {
             .await;
 
         let p = OpenAIProvider::with_base_url("test-key".into(), server.uri());
-        let opts = ChatOptions { model: "gpt-5.4-mini".into(), ..Default::default() };
+        let opts = ChatOptions {
+            model: "gpt-5.4-mini".into(),
+            ..Default::default()
+        };
         let mut stream = p.chat_stream(vec![], vec![], opts).await.unwrap();
 
         let mut events = Vec::new();
@@ -491,10 +550,20 @@ mod tests {
             events.push(ev.unwrap());
         }
 
-        let start_a = events.iter().find(|e| matches!(e, ChatEvent::ToolCallStart { id, .. } if id == "tc_A"));
-        assert!(start_a.is_some(), "expected ToolCallStart for tc_A; got {events:?}");
-        let start_b = events.iter().find(|e| matches!(e, ChatEvent::ToolCallStart { id, .. } if id == "tc_B"));
-        assert!(start_b.is_some(), "expected ToolCallStart for tc_B; got {events:?}");
+        let start_a = events
+            .iter()
+            .find(|e| matches!(e, ChatEvent::ToolCallStart { id, .. } if id == "tc_A"));
+        assert!(
+            start_a.is_some(),
+            "expected ToolCallStart for tc_A; got {events:?}"
+        );
+        let start_b = events
+            .iter()
+            .find(|e| matches!(e, ChatEvent::ToolCallStart { id, .. } if id == "tc_B"));
+        assert!(
+            start_b.is_some(),
+            "expected ToolCallStart for tc_B; got {events:?}"
+        );
 
         // Names must be populated (PM-01 check).
         if let Some(ChatEvent::ToolCallStart { name, .. }) = start_a {
@@ -505,12 +574,23 @@ mod tests {
         }
 
         let end_a = events.iter().find(|e| matches!(e, ChatEvent::ToolCallEnd { id, args_json } if id == "tc_A" && args_json.contains("foo.ts")));
-        assert!(end_a.is_some(), "expected ToolCallEnd for tc_A; got {events:?}");
+        assert!(
+            end_a.is_some(),
+            "expected ToolCallEnd for tc_A; got {events:?}"
+        );
         let end_b = events.iter().find(|e| matches!(e, ChatEvent::ToolCallEnd { id, args_json } if id == "tc_B" && args_json.contains("TODO")));
-        assert!(end_b.is_some(), "expected ToolCallEnd for tc_B; got {events:?}");
+        assert!(
+            end_b.is_some(),
+            "expected ToolCallEnd for tc_B; got {events:?}"
+        );
 
-        let done = events.iter().find(|e| matches!(e, ChatEvent::Done { stop_reason, .. } if stop_reason == "tool_use"));
-        assert!(done.is_some(), "expected Done with stop_reason=tool_use; got {events:?}");
+        let done = events.iter().find(
+            |e| matches!(e, ChatEvent::Done { stop_reason, .. } if stop_reason == "tool_use"),
+        );
+        assert!(
+            done.is_some(),
+            "expected Done with stop_reason=tool_use; got {events:?}"
+        );
     }
 
     /// Text-only SSE (no tool calls).
@@ -537,7 +617,10 @@ mod tests {
             .await;
 
         let p = OpenAIProvider::with_base_url("test-key".into(), server.uri());
-        let opts = ChatOptions { model: "gpt-5.4-mini".into(), ..Default::default() };
+        let opts = ChatOptions {
+            model: "gpt-5.4-mini".into(),
+            ..Default::default()
+        };
         let mut stream = p.chat_stream(vec![], vec![], opts).await.unwrap();
 
         let mut text = String::new();
@@ -567,7 +650,10 @@ mod tests {
             .await;
 
         let p = OpenAIProvider::with_base_url("bad-key".into(), server.uri());
-        let opts = ChatOptions { model: "gpt-5.4-mini".into(), ..Default::default() };
+        let opts = ChatOptions {
+            model: "gpt-5.4-mini".into(),
+            ..Default::default()
+        };
         let result = p.chat_stream(vec![], vec![], opts).await;
         assert!(result.is_err(), "expected Err from 401 response");
         let err = result.err().unwrap();
@@ -577,9 +663,9 @@ mod tests {
     /// stop_reason normalization.
     #[test]
     fn normalize_stop_reason_mapping() {
-        assert_eq!(normalize_stop_reason("stop"),       "end_turn");
+        assert_eq!(normalize_stop_reason("stop"), "end_turn");
         assert_eq!(normalize_stop_reason("tool_calls"), "tool_use");
-        assert_eq!(normalize_stop_reason("length"),     "max_tokens");
+        assert_eq!(normalize_stop_reason("length"), "max_tokens");
         assert_eq!(normalize_stop_reason("content_filter"), "content_filter");
     }
 }

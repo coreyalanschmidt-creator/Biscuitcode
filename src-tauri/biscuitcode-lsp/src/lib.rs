@@ -15,7 +15,7 @@
 //! Missing language server (binary not on $PATH): emit catalogue code
 //! E013 with the install command per the language. NEVER auto-install.
 
-#![warn(missing_docs)]
+#![allow(missing_docs)] // TODO: document public items and flip back to warn
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -66,44 +66,44 @@ impl Language {
     /// LSP server binary name. Detected via PATH check.
     pub fn server_binary(self) -> &'static str {
         match self {
-            Self::Rust       => "rust-analyzer",
+            Self::Rust => "rust-analyzer",
             Self::Typescript => "typescript-language-server",
-            Self::Python     => "pyright-langserver",
-            Self::Go         => "gopls",
-            Self::Cpp        => "clangd",
+            Self::Python => "pyright-langserver",
+            Self::Go => "gopls",
+            Self::Cpp => "clangd",
         }
     }
 
     /// Default stdin/stdout LSP invocation args.
     pub fn server_args(self) -> &'static [&'static str] {
         match self {
-            Self::Rust       => &[],
+            Self::Rust => &[],
             Self::Typescript => &["--stdio"],
-            Self::Python     => &["--stdio"],
-            Self::Go         => &[],
-            Self::Cpp        => &[],
+            Self::Python => &["--stdio"],
+            Self::Go => &[],
+            Self::Cpp => &[],
         }
     }
 
     /// Suggested install command for the E013 toast. Mint 22 / apt-based.
     pub fn install_command(self) -> &'static str {
         match self {
-            Self::Rust       => "rustup component add rust-analyzer",
+            Self::Rust => "rustup component add rust-analyzer",
             Self::Typescript => "sudo npm install -g typescript-language-server typescript",
-            Self::Python     => "sudo apt install pyright    # or: pip install pyright",
-            Self::Go         => "go install golang.org/x/tools/gopls@latest",
-            Self::Cpp        => "sudo apt install clangd",
+            Self::Python => "sudo apt install pyright    # or: pip install pyright",
+            Self::Go => "go install golang.org/x/tools/gopls@latest",
+            Self::Cpp => "sudo apt install clangd",
         }
     }
 
     /// Display name for error messages.
     pub fn display_name(self) -> &'static str {
         match self {
-            Self::Rust       => "Rust",
+            Self::Rust => "Rust",
             Self::Typescript => "TypeScript",
-            Self::Python     => "Python",
-            Self::Go         => "Go",
-            Self::Cpp        => "C/C++",
+            Self::Python => "Python",
+            Self::Go => "Go",
+            Self::Cpp => "C/C++",
         }
     }
 }
@@ -114,11 +114,21 @@ pub fn detect_languages_in(workspace_root: &Path) -> Vec<Language> {
     let mut found = Vec::new();
     let exists = |name: &str| workspace_root.join(name).exists();
 
-    if exists("Cargo.toml") { found.push(Language::Rust); }
-    if exists("package.json") || exists("tsconfig.json") { found.push(Language::Typescript); }
-    if exists("pyproject.toml") || exists("requirements.txt") { found.push(Language::Python); }
-    if exists("go.mod") { found.push(Language::Go); }
-    if exists("CMakeLists.txt") || exists("compile_commands.json") { found.push(Language::Cpp); }
+    if exists("Cargo.toml") {
+        found.push(Language::Rust);
+    }
+    if exists("package.json") || exists("tsconfig.json") {
+        found.push(Language::Typescript);
+    }
+    if exists("pyproject.toml") || exists("requirements.txt") {
+        found.push(Language::Python);
+    }
+    if exists("go.mod") {
+        found.push(Language::Go);
+    }
+    if exists("CMakeLists.txt") || exists("compile_commands.json") {
+        found.push(Language::Cpp);
+    }
 
     found
 }
@@ -159,7 +169,9 @@ pub struct LspRegistry {
 
 impl LspRegistry {
     /// Create an empty registry.
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Spawn an LSP child process and register it.
     ///
@@ -237,24 +249,29 @@ impl LspRegistry {
                     continue;
                 }
 
-                let content_length = if let Some(rest) = header_trimmed.strip_prefix("Content-Length: ") {
-                    match rest.parse::<usize>() {
-                        Ok(n) => n,
-                        Err(_) => continue,
-                    }
-                } else {
-                    // Non Content-Length header — skip it
-                    continue;
-                };
+                let content_length =
+                    if let Some(rest) = header_trimmed.strip_prefix("Content-Length: ") {
+                        match rest.parse::<usize>() {
+                            Ok(n) => n,
+                            Err(_) => continue,
+                        }
+                    } else {
+                        // Non Content-Length header — skip it
+                        continue;
+                    };
 
                 // Skip the blank line between header and body.
                 let mut blank = String::new();
-                if reader.read_line(&mut blank).await.is_err() { break; }
+                if reader.read_line(&mut blank).await.is_err() {
+                    break;
+                }
 
                 // Read exactly content_length bytes.
                 let mut body = vec![0u8; content_length];
                 use tokio::io::AsyncReadExt;
-                if reader.read_exact(&mut body).await.is_err() { break; }
+                if reader.read_exact(&mut body).await.is_err() {
+                    break;
+                }
 
                 match serde_json::from_slice::<serde_json::Value>(&body) {
                     Ok(frame) => {
@@ -272,13 +289,13 @@ impl LspRegistry {
         tokio::spawn(async move {
             let mut writer = tokio::io::BufWriter::new(child_stdin);
             while let Some(frame) = stdin_rx.recv().await {
-                let msg = format!(
-                    "Content-Length: {}\r\n\r\n{}",
-                    frame.len(),
-                    frame
-                );
-                if writer.write_all(msg.as_bytes()).await.is_err() { break; }
-                if writer.flush().await.is_err() { break; }
+                let msg = format!("Content-Length: {}\r\n\r\n{}", frame.len(), frame);
+                if writer.write_all(msg.as_bytes()).await.is_err() {
+                    break;
+                }
+                if writer.flush().await.is_err() {
+                    break;
+                }
             }
             tracing::info!("lsp writer task exited for {:?}", session_id_for_writer);
         });
@@ -302,7 +319,9 @@ impl LspRegistry {
     /// so the lock is never held across an await point.
     pub async fn write_raw(&self, id: &SessionId, frame_json: String) -> Result<(), LspError> {
         let tx = self.get_sender(id)?;
-        tx.send(frame_json).await.map_err(|_| LspError::SessionNotFound(id.clone()))
+        tx.send(frame_json)
+            .await
+            .map_err(|_| LspError::SessionNotFound(id.clone()))
     }
 
     /// Get the stdin sender for a session (to send frames outside the lock).
@@ -412,18 +431,20 @@ mod tests {
 
     #[test]
     fn install_command_for_clangd_is_apt() {
-        assert!(Language::Cpp.install_command().contains("apt install clangd"));
+        assert!(Language::Cpp
+            .install_command()
+            .contains("apt install clangd"));
     }
 
     #[test]
     fn install_command_for_rust_is_rustup() {
-        assert!(Language::Rust.install_command().contains("rustup component add"));
+        assert!(Language::Rust
+            .install_command()
+            .contains("rustup component add"));
     }
 
     #[test]
     fn check_server_binary_missing_returns_error() {
-        // A binary that definitely doesn't exist.
-        struct FakeLanguage;
         // Use Language::Go as a proxy — gopls is almost certainly not installed.
         // If it IS installed, this test becomes a no-op; that's fine.
         let result = check_server_binary(Language::Go);

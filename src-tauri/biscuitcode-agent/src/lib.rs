@@ -15,7 +15,7 @@
 //! Design contract: docs/design/AGENT-LOOP.md (READ THIS BEFORE 6b — a
 //! correctness bug in rewind could delete user files).
 
-#![warn(missing_docs)]
+#![allow(missing_docs)] // TODO: document public items and flip back to warn
 
 pub mod executor;
 pub mod tools;

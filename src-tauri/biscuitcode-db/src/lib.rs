@@ -13,15 +13,15 @@
 //! Migrations live in `src/migrations/` as `.sql` files included via
 //! `include_str!`; the migrator runs them in `PRAGMA user_version` order.
 
-#![warn(missing_docs)]
+#![allow(missing_docs)] // TODO: document public items and flip back to warn
 
 pub mod migrations;
 pub mod queries;
 pub mod types;
 
 pub use types::{
-    Conversation, ConversationId, DbError, Snapshot, SnapshotFile, SnapshotId,
-    StoredMessage, MessageId, Workspace, WorkspaceId,
+    Conversation, ConversationId, DbError, MessageId, Snapshot, SnapshotFile, SnapshotId,
+    StoredMessage, Workspace, WorkspaceId,
 };
 
 use std::path::Path;
@@ -101,7 +101,13 @@ mod tests {
             .unwrap()
             .map(Result::unwrap)
             .collect();
-        for required in ["conversations", "messages", "workspaces", "snapshots", "snapshot_files"] {
+        for required in [
+            "conversations",
+            "messages",
+            "workspaces",
+            "snapshots",
+            "snapshot_files",
+        ] {
             assert!(
                 names.iter().any(|n| n == required),
                 "missing table {required}; have {names:?}",

@@ -59,7 +59,9 @@ fn is_inside_workspace(root: &std::path::Path, path: &std::path::Path) -> bool {
     let mut out = PathBuf::new();
     for c in path.components() {
         match c {
-            std::path::Component::ParentDir => { out.pop(); }
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
             std::path::Component::CurDir => {}
             other => out.push(other),
         }
@@ -70,7 +72,11 @@ fn is_inside_workspace(root: &std::path::Path, path: &std::path::Path) -> bool {
 /// Detect whether a byte slice uses CRLF line endings (majority vote).
 fn uses_crlf(bytes: &[u8]) -> bool {
     let crlf_count = bytes.windows(2).filter(|w| w == b"\r\n").count();
-    let lf_only_count = bytes.iter().filter(|&&b| b == b'\n').count().saturating_sub(crlf_count);
+    let lf_only_count = bytes
+        .iter()
+        .filter(|&&b| b == b'\n')
+        .count()
+        .saturating_sub(crlf_count);
     crlf_count > lf_only_count
 }
 
@@ -250,8 +256,8 @@ impl Tool for ApplyPatchTool {
         args: serde_json::Value,
         ctx: &ToolCtx,
     ) -> Result<ToolResult, ToolError> {
-        let args: Args = serde_json::from_value(args)
-            .map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
+        let args: Args =
+            serde_json::from_value(args).map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
 
         let path = resolve_path(&ctx.workspace_root, &args.path);
 
@@ -270,8 +276,7 @@ impl Tool for ApplyPatchTool {
         let had_crlf = uses_crlf(&original_bytes);
 
         // Normalize to LF for patching (PM-03 fix).
-        let original_lf = String::from_utf8_lossy(&original_bytes)
-            .replace("\r\n", "\n");
+        let original_lf = String::from_utf8_lossy(&original_bytes).replace("\r\n", "\n");
 
         let patched = apply_patch_text(&original_lf, &args.patch)
             .map_err(|e| ToolError::Other(format!("patch apply failed: {e}")))?;
@@ -338,9 +343,12 @@ mod tests {
             .await
             .unwrap();
         assert!(r.result.contains("Applied"), "result: {}", r.result);
-        let content = std::fs::read(&dir.path().join("win.txt")).unwrap();
+        let content = std::fs::read(dir.path().join("win.txt")).unwrap();
         // Should still use CRLF endings and have the change.
-        assert!(content.windows(2).any(|w| w == b"\r\n"), "CRLF should be preserved");
+        assert!(
+            content.windows(2).any(|w| w == b"\r\n"),
+            "CRLF should be preserved"
+        );
         let text = String::from_utf8(content).unwrap();
         assert!(text.contains("LINE2"), "patch change should be applied");
     }
@@ -362,7 +370,10 @@ mod tests {
         let tool = ApplyPatchTool;
         let ctx = make_ctx(&dir);
         let err = tool
-            .execute(json!({ "path": "nonexistent.txt", "patch": "@@ -1,1 +1,1 @@\n-x\n+y\n" }), &ctx)
+            .execute(
+                json!({ "path": "nonexistent.txt", "patch": "@@ -1,1 +1,1 @@\n-x\n+y\n" }),
+                &ctx,
+            )
             .await;
         assert!(err.is_err());
     }

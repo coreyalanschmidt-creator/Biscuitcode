@@ -163,10 +163,7 @@ pub fn conversations_export(
     let json = serde_json::to_string_pretty(&export).map_err(|e| e.to_string())?;
 
     // Write to app data dir.
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let filename = format!(
         "biscuitcode-conversations-{}.json",
         Utc::now().format("%Y-%m-%d")
@@ -177,7 +174,10 @@ pub fn conversations_export(
     Ok(out_path.to_string_lossy().into_owned())
 }
 
-fn build_export(db: &Database, app: &AppHandle) -> Result<ConversationExport, biscuitcode_db::DbError> {
+fn build_export(
+    db: &Database,
+    app: &AppHandle,
+) -> Result<ConversationExport, biscuitcode_db::DbError> {
     use rusqlite::params;
 
     let conn = db.conn();
@@ -203,11 +203,24 @@ fn build_export(db: &Database, app: &AppHandle) -> Result<ConversationExport, bi
         "SELECT conversation_id, workspace_id, title, created_at, updated_at, active_model, active_branch_message_id \
          FROM conversations ORDER BY created_at"
     )?;
-    let conv_rows: Vec<(String, String, String, String, String, String, Option<String>)> = conv_stmt
+    type ConvRow = (
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+    );
+    let conv_rows: Vec<ConvRow> = conv_stmt
         .query_map([], |row| {
             Ok((
-                row.get(0)?, row.get(1)?, row.get(2)?,
-                row.get(3)?, row.get(4)?, row.get(5)?,
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
                 row.get(6)?,
             ))
         })?
@@ -237,11 +250,11 @@ fn build_export(db: &Database, app: &AppHandle) -> Result<ConversationExport, bi
 
                 let snapshots: Vec<ExportSnapshot> = Vec::new(); // populated below
                 Ok((
-                    row.get::<_, String>(0)?,  // message_id
-                    row.get::<_, Option<String>>(1)?,  // parent_id
-                    row.get::<_, String>(2)?,  // role
-                    row.get::<_, String>(3)?,  // created_at
-                    row.get::<_, String>(4)?,  // model
+                    row.get::<_, String>(0)?,         // message_id
+                    row.get::<_, Option<String>>(1)?, // parent_id
+                    row.get::<_, String>(2)?,         // role
+                    row.get::<_, String>(3)?,         // created_at
+                    row.get::<_, String>(4)?,         // model
                     content_json,
                     tc_json,
                     tr_json,
@@ -251,62 +264,88 @@ fn build_export(db: &Database, app: &AppHandle) -> Result<ConversationExport, bi
                 ))
             })?
             .filter_map(|r| r.ok())
-            .map(|(msg_id, parent_id, role, created_at, model, content_json, tc_json, tr_json, snap_id, usage_json, _)| {
-                // Load snapshot files if this message has a snapshot.
-                let snapshots = snap_id.map(|sid| {
-                    let mut sf_stmt = conn.prepare(
-                        "SELECT abs_path, pre_sha256, pre_size_bytes, snapshot_filename \
-                         FROM snapshot_files WHERE snapshot_id = ?1"
-                    ).ok()?;
-                    let files: Vec<ExportSnapshotFile> = sf_stmt.query_map(params![sid], |row| {
-                        let abs_path: String = row.get(0)?;
-                        let pre_sha256: Option<String> = row.get(1)?;
-                        let pre_size: Option<i64> = row.get(2)?;
-                        let snap_file: Option<String> = row.get(3)?;
-                        Ok(ExportSnapshotFile {
-                            path: abs_path.clone(),
-                            pre_sha256,
-                            pre_size_bytes: pre_size.map(|s| s as u64),
-                            snapshot_path_relative_to_cache: snap_file.map(|f| {
-                                // Make relative to cache root.
-                                let full = format!("{}/snapshots/{}", cache_root, f);
-                                full.strip_prefix(&cache_root)
-                                    .map(|s| s.trim_start_matches('/').to_string())
-                                    .unwrap_or(f)
-                            }),
-                        })
-                    }).ok()?.filter_map(|r| r.ok()).collect();
-
-                    // Get tool_call_id from snapshots table.
-                    let tc_id: String = conn.query_row(
-                        "SELECT tool_call_id FROM snapshots WHERE snapshot_id = ?1",
-                        params![sid],
-                        |row| row.get(0),
-                    ).unwrap_or_default();
-
-                    Some(ExportSnapshot {
-                        snapshot_id: sid,
-                        tool_call_id: tc_id,
-                        files,
-                    })
-                }).flatten().into_iter().collect::<Vec<_>>();
-
-                ExportMessage {
-                    message_id: msg_id,
+            .map(
+                |(
+                    msg_id,
                     parent_id,
                     role,
                     created_at,
                     model,
-                    content: serde_json::from_str(&content_json).unwrap_or(serde_json::Value::Null),
-                    tool_calls: serde_json::from_str(&tc_json).unwrap_or(serde_json::Value::Array(vec![])),
-                    tool_results: serde_json::from_str(&tr_json).unwrap_or(serde_json::Value::Array(vec![])),
-                    snapshots,
-                    usage: usage_json
-                        .as_deref()
-                        .and_then(|s| serde_json::from_str(s).ok())
-                        .unwrap_or(serde_json::Value::Null),
-                }
-            })
+                    content_json,
+                    tc_json,
+                    tr_json,
+                    snap_id,
+                    usage_json,
+                    _,
+                )| {
+                    // Load snapshot files if this message has a snapshot.
+                    let snapshots = snap_id
+                        .and_then(|sid| {
+                            let mut sf_stmt = conn.prepare(
+                        "SELECT abs_path, pre_sha256, pre_size_bytes, snapshot_filename \
+                         FROM snapshot_files WHERE snapshot_id = ?1"
+                    ).ok()?;
+                            let files: Vec<ExportSnapshotFile> = sf_stmt
+                                .query_map(params![sid], |row| {
+                                    let abs_path: String = row.get(0)?;
+                                    let pre_sha256: Option<String> = row.get(1)?;
+                                    let pre_size: Option<i64> = row.get(2)?;
+                                    let snap_file: Option<String> = row.get(3)?;
+                                    Ok(ExportSnapshotFile {
+                                        path: abs_path.clone(),
+                                        pre_sha256,
+                                        pre_size_bytes: pre_size.map(|s| s as u64),
+                                        snapshot_path_relative_to_cache: snap_file.map(|f| {
+                                            // Make relative to cache root.
+                                            let full = format!("{}/snapshots/{}", cache_root, f);
+                                            full.strip_prefix(&cache_root)
+                                                .map(|s| s.trim_start_matches('/').to_string())
+                                                .unwrap_or(f)
+                                        }),
+                                    })
+                                })
+                                .ok()?
+                                .filter_map(|r| r.ok())
+                                .collect();
+
+                            // Get tool_call_id from snapshots table.
+                            let tc_id: String = conn
+                                .query_row(
+                                    "SELECT tool_call_id FROM snapshots WHERE snapshot_id = ?1",
+                                    params![sid],
+                                    |row| row.get(0),
+                                )
+                                .unwrap_or_default();
+
+                            Some(ExportSnapshot {
+                                snapshot_id: sid,
+                                tool_call_id: tc_id,
+                                files,
+                            })
+                        })
+                        .into_iter()
+                        .collect::<Vec<_>>();
+
+                    ExportMessage {
+                        message_id: msg_id,
+                        parent_id,
+                        role,
+                        created_at,
+                        model,
+                        content: serde_json::from_str(&content_json)
+                            .unwrap_or(serde_json::Value::Null),
+                        tool_calls: serde_json::from_str(&tc_json)
+                            .unwrap_or(serde_json::Value::Array(vec![])),
+                        tool_results: serde_json::from_str(&tr_json)
+                            .unwrap_or(serde_json::Value::Array(vec![])),
+                        snapshots,
+                        usage: usage_json
+                            .as_deref()
+                            .and_then(|s| serde_json::from_str(s).ok())
+                            .unwrap_or(serde_json::Value::Null),
+                    }
+                },
+            )
             .collect();
 
         conversations.push(ExportConversation {
@@ -481,10 +520,7 @@ pub fn snapshots_cleanup_now(
     let guard = db_state.0.lock().map_err(|e| e.to_string())?;
     let db = guard.as_ref().ok_or("database not initialised")?;
 
-    let cache_root = app
-        .path()
-        .app_cache_dir()
-        .map_err(|e| e.to_string())?;
+    let cache_root = app.path().app_cache_dir().map_err(|e| e.to_string())?;
     let snapshots_dir = cache_root.join("snapshots");
 
     let conn = db.conn();
@@ -518,10 +554,8 @@ pub fn snapshots_cleanup_now(
     for (snap_id, conv_id) in &candidates {
         // Delete snapshot files from disk.
         let snap_dir = snapshots_dir.join(conv_id).join(snap_id);
-        if snap_dir.exists() {
-            if std::fs::remove_dir_all(&snap_dir).is_ok() {
-                deleted_files += 1;
-            }
+        if snap_dir.exists() && std::fs::remove_dir_all(&snap_dir).is_ok() {
+            deleted_files += 1;
         }
 
         // Delete from DB (CASCADE removes snapshot_files rows).
@@ -643,7 +677,10 @@ mod tests {
 
     #[test]
     fn cleanup_result_serializes() {
-        let r = CleanupResult { deleted_snapshots: 3, deleted_files: 2 };
+        let r = CleanupResult {
+            deleted_snapshots: 3,
+            deleted_files: 2,
+        };
         let json = serde_json::to_string(&r).unwrap();
         assert!(json.contains("deleted_snapshots"));
     }

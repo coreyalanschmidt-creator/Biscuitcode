@@ -27,16 +27,12 @@ pub async fn terminal_open(
     rows: u16,
     cols: u16,
 ) -> Result<SessionId, String> {
-    let shell = shell
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(detect_shell);
+    let shell = shell.filter(|s| !s.is_empty()).unwrap_or_else(detect_shell);
 
     let cwd: PathBuf = cwd
         .filter(|s| !s.is_empty())
         .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/tmp"))
-        });
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/tmp")));
 
     // Pre-generate the session ID so the event name can be embedded in the
     // reader callback before the session is created.
@@ -45,16 +41,9 @@ pub async fn terminal_open(
     let app_clone = app.clone();
 
     state
-        .open(
-            shell,
-            cwd,
-            rows,
-            cols,
-            Some(id),
-            move |chunk| {
-                let _ = app_clone.emit(&event_name, TerminalDataPayload { data: chunk });
-            },
-        )
+        .open(shell, cwd, rows, cols, Some(id), move |chunk| {
+            let _ = app_clone.emit(&event_name, TerminalDataPayload { data: chunk });
+        })
         .map_err(|e| e.to_string())
 }
 
@@ -65,7 +54,9 @@ pub fn terminal_input(
     session_id: SessionId,
     data: Vec<u8>,
 ) -> Result<(), String> {
-    state.write_input(&session_id, data).map_err(|e| e.to_string())
+    state
+        .write_input(&session_id, data)
+        .map_err(|e| e.to_string())
 }
 
 /// Resize a session's PTY to the given dimensions.

@@ -40,10 +40,7 @@ pub trait ModelProvider: Send + Sync {
         messages: Vec<Message>,
         tools: Vec<ToolSpec>,
         opts: ChatOptions,
-    ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<ChatEvent, ProviderError>> + Send>>,
-        ProviderError,
-    >;
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatEvent, ProviderError>> + Send>>, ProviderError>;
 
     /// Whether the active model can call tools. Frontend grays out the
     /// agent toggle when false.

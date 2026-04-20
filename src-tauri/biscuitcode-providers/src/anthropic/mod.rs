@@ -37,8 +37,7 @@ use tracing::warn;
 
 use crate::r#trait::ModelProvider;
 use crate::types::{
-    ChatEvent, ChatOptions, ContentBlock, Message, ModelInfo, ProviderError, Role, ToolSpec,
-    Usage,
+    ChatEvent, ChatOptions, ContentBlock, Message, ModelInfo, ProviderError, Role, ToolSpec, Usage,
 };
 
 const ANTHROPIC_API_BASE: &str = "https://api.anthropic.com";
@@ -136,10 +135,8 @@ impl ModelProvider for AnthropicProvider {
         messages: Vec<Message>,
         tools: Vec<ToolSpec>,
         opts: ChatOptions,
-    ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<ChatEvent, ProviderError>> + Send>>,
-        ProviderError,
-    > {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatEvent, ProviderError>> + Send>>, ProviderError>
+    {
         let body = build_request_body(&messages, &tools, &opts);
         debug!(model = %opts.model, "anthropic chat_stream request");
 
@@ -153,7 +150,9 @@ impl ModelProvider for AnthropicProvider {
             .json(&body)
             .send()
             .await
-            .map_err(|e| ProviderError::Network { reason: e.to_string() })?;
+            .map_err(|e| ProviderError::Network {
+                reason: e.to_string(),
+            })?;
 
         let status = resp.status();
         if status == 401 {
@@ -166,15 +165,23 @@ impl ModelProvider for AnthropicProvider {
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(60);
-            return Err(ProviderError::RateLimited { retry_after_seconds: retry_after });
+            return Err(ProviderError::RateLimited {
+                retry_after_seconds: retry_after,
+            });
         }
         if status.is_server_error() {
             let msg = resp.text().await.unwrap_or_default();
-            return Err(ProviderError::ServerError { status: status.as_u16(), message: msg });
+            return Err(ProviderError::ServerError {
+                status: status.as_u16(),
+                message: msg,
+            });
         }
         if status.is_client_error() {
             let msg = resp.text().await.unwrap_or_default();
-            return Err(ProviderError::BadRequest { status: status.as_u16(), message: msg });
+            return Err(ProviderError::BadRequest {
+                status: status.as_u16(),
+                message: msg,
+            });
         }
 
         let byte_stream = resp.bytes_stream();
@@ -373,7 +380,11 @@ impl ModelProvider for AnthropicProvider {
 enum BlockState {
     Text,
     Thinking,
-    ToolUse { id: String, name: String },
+    ToolUse {
+        id: String,
+        #[allow(dead_code)]
+        name: String,
+    },
 }
 
 /// Build the JSON request body for the Anthropic Messages API.
@@ -403,7 +414,7 @@ pub(crate) fn build_request_body(
     let msgs: Vec<Value> = messages
         .iter()
         .filter(|m| m.role != Role::System)
-        .map(|m| encode_message(m))
+        .map(encode_message)
         .collect();
 
     // Tools array.
@@ -481,7 +492,10 @@ fn encode_message(msg: &Message) -> Value {
             ContentBlock::Thinking { text } => {
                 content_arr.push(json!({ "type": "thinking", "thinking": text }));
             }
-            ContentBlock::Image { media_type, data_b64 } => {
+            ContentBlock::Image {
+                media_type,
+                data_b64,
+            } => {
                 content_arr.push(json!({
                     "type": "image",
                     "source": {
@@ -491,7 +505,10 @@ fn encode_message(msg: &Message) -> Value {
                     }
                 }));
             }
-            ContentBlock::Mention { mention_kind: _, value } => {
+            ContentBlock::Mention {
+                mention_kind: _,
+                value,
+            } => {
                 content_arr.push(json!({
                     "type": "text",
                     "text": serde_json::to_string(value).unwrap_or_default(),
@@ -525,9 +542,10 @@ pub(crate) fn model_strips_sampling(model: &str) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
-    use wiremock::matchers::{header, method, path};
+    use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[test]
@@ -547,7 +565,9 @@ mod tests {
     async fn list_models_includes_default_opus() {
         let p = AnthropicProvider::new("dummy".into());
         let models = p.list_models().await.expect("hard-coded list cannot fail");
-        assert!(models.iter().any(|m| m.id == "claude-opus-4-7" && !m.legacy));
+        assert!(models
+            .iter()
+            .any(|m| m.id == "claude-opus-4-7" && !m.legacy));
         assert!(models.iter().any(|m| m.id == "claude-opus-4-6" && m.legacy));
     }
 
@@ -588,11 +608,20 @@ mod tests {
         };
         let body = build_request_body(&[], &[], &opts);
         // temperature and top_p must be present (not absent as they are for Opus 4.7).
-        assert!(body.get("temperature").is_some(), "temperature must be present for sonnet");
-        assert!(body.get("top_p").is_some(), "top_p must be present for sonnet");
+        assert!(
+            body.get("temperature").is_some(),
+            "temperature must be present for sonnet"
+        );
+        assert!(
+            body.get("top_p").is_some(),
+            "top_p must be present for sonnet"
+        );
         // f32 → JSON → f64 loses precision; check approximate value instead.
         let t: f64 = body["temperature"].as_f64().unwrap();
-        assert!((t - 0.5).abs() < 0.001, "temperature should be ~0.5, got {t}");
+        assert!(
+            (t - 0.5).abs() < 0.001,
+            "temperature should be ~0.5, got {t}"
+        );
     }
 
     /// AC: `cache_control_applied_to_system_prompt`
@@ -606,7 +635,10 @@ mod tests {
         };
         let body = build_request_body(&[], &[], &opts);
         let system = &body["system"];
-        assert!(system.is_array(), "system should be an array with caching on; got {system}");
+        assert!(
+            system.is_array(),
+            "system should be an array with caching on; got {system}"
+        );
         let first = &system[0];
         assert_eq!(first["type"], "text");
         assert_eq!(first["cache_control"]["type"], "ephemeral");
@@ -622,7 +654,11 @@ mod tests {
             ..Default::default()
         };
         let body = build_request_body(&[], &[], &opts);
-        assert!(body["system"].is_string(), "expected plain string; got {}", body["system"]);
+        assert!(
+            body["system"].is_string(),
+            "expected plain string; got {}",
+            body["system"]
+        );
     }
 
     /// Tool definitions get cache_control when caching is on.
@@ -640,9 +676,9 @@ mod tests {
         };
         let body = build_request_body(&[], &tools, &opts);
         assert_eq!(
-            body["tools"][0]["cache_control"]["type"],
-            "ephemeral",
-            "tool definition must have cache_control; got {}", body["tools"][0]
+            body["tools"][0]["cache_control"]["type"], "ephemeral",
+            "tool definition must have cache_control; got {}",
+            body["tools"][0]
         );
     }
 
@@ -719,20 +755,33 @@ mod tests {
             ..Default::default()
         };
 
-        let mut stream = provider.chat_stream_inner(vec![], vec![], opts).await.unwrap();
+        let mut stream = provider
+            .chat_stream_inner(vec![], vec![], opts)
+            .await
+            .unwrap();
         let mut events: Vec<ChatEvent> = Vec::new();
         while let Some(item) = stream.next().await {
             events.push(item.unwrap());
         }
 
         // Expect: ToolCallStart, ToolCallDelta x2, ToolCallEnd, Done
-        let start = events.iter().find(|e| matches!(e, ChatEvent::ToolCallStart { name, .. } if name == "read_file"));
-        assert!(start.is_some(), "expected ToolCallStart for read_file; got {events:?}");
+        let start = events
+            .iter()
+            .find(|e| matches!(e, ChatEvent::ToolCallStart { name, .. } if name == "read_file"));
+        assert!(
+            start.is_some(),
+            "expected ToolCallStart for read_file; got {events:?}"
+        );
 
         let end = events.iter().find(|e| matches!(e, ChatEvent::ToolCallEnd { id, args_json } if id == "tu_01" && args_json.contains("foo.txt")));
-        assert!(end.is_some(), "expected ToolCallEnd with assembled args; got {events:?}");
+        assert!(
+            end.is_some(),
+            "expected ToolCallEnd with assembled args; got {events:?}"
+        );
 
-        let done = events.iter().find(|e| matches!(e, ChatEvent::Done { stop_reason, .. } if stop_reason == "tool_use"));
+        let done = events.iter().find(
+            |e| matches!(e, ChatEvent::Done { stop_reason, .. } if stop_reason == "tool_use"),
+        );
         assert!(done.is_some(), "expected Done event; got {events:?}");
     }
 }
@@ -752,10 +801,8 @@ impl TestableAnthropicProvider {
         messages: Vec<Message>,
         tools: Vec<ToolSpec>,
         opts: ChatOptions,
-    ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<ChatEvent, ProviderError>> + Send>>,
-        ProviderError,
-    > {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatEvent, ProviderError>> + Send>>, ProviderError>
+    {
         let body = build_request_body(&messages, &tools, &opts);
 
         let resp = self
@@ -768,7 +815,9 @@ impl TestableAnthropicProvider {
             .json(&body)
             .send()
             .await
-            .map_err(|e| ProviderError::Network { reason: e.to_string() })?;
+            .map_err(|e| ProviderError::Network {
+                reason: e.to_string(),
+            })?;
 
         let status = resp.status();
         if status == 401 {
@@ -781,15 +830,23 @@ impl TestableAnthropicProvider {
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(60);
-            return Err(ProviderError::RateLimited { retry_after_seconds: retry_after });
+            return Err(ProviderError::RateLimited {
+                retry_after_seconds: retry_after,
+            });
         }
         if status.is_server_error() {
             let msg = resp.text().await.unwrap_or_default();
-            return Err(ProviderError::ServerError { status: status.as_u16(), message: msg });
+            return Err(ProviderError::ServerError {
+                status: status.as_u16(),
+                message: msg,
+            });
         }
         if status.is_client_error() {
             let msg = resp.text().await.unwrap_or_default();
-            return Err(ProviderError::BadRequest { status: status.as_u16(), message: msg });
+            return Err(ProviderError::BadRequest {
+                status: status.as_u16(),
+                message: msg,
+            });
         }
 
         let byte_stream = resp.bytes_stream();

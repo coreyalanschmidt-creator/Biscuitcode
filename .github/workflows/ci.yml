@@ -66,7 +66,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
@@ -101,7 +101,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
@@ -150,7 +150,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
@@ -200,7 +200,7 @@ jobs:
         run: cargo audit
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
@@ -232,15 +232,31 @@ jobs:
       - name: Install cargo-license
         run: cargo install cargo-license --locked
 
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
       - name: cargo license check
         working-directory: src-tauri
         run: |
           cargo license --json > /tmp/cargo-licenses.json
-          # Fail on any GPL/AGPL/LGPL/SSPL/BSL/EPL/MPL dependency.
-          # Allowed set: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Unlicense, Zlib.
-          DISALLOWED=$(jq -r '.[] | select(
-            (.license // "") | test("GPL|LGPL|AGPL|SSPL|BSL|MPL"; "i")
-          ) | "\(.name) \(.version) (\(.license))"' /tmp/cargo-licenses.json)
+          # Block strong copyleft only: GPL, AGPL, LGPL, SSPL.
+          # MPL-2.0 is permitted (file-level copyleft, standard in the Rust
+          # ecosystem — cssparser, selectors, option-ext, etc.).
+          # For OR-combined licenses ("Apache-2.0 OR LGPL-2.1-or-later OR MIT")
+          # we accept the crate if ANY alternative is in the safe set.
+          # Allowed: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC,
+          # Unlicense, Zlib, CC0-1.0, MPL-2.0, 0BSD.
+          DISALLOWED=$(jq -r '
+            def is_safe(lic): lic | test("^(MIT|Apache-2\\.0|BSD-[23]-Clause|ISC|Unlicense|Zlib|CC0-1\\.0|MPL-2\\.0|0BSD)$");
+            def has_safe_alt(s):
+              (s | split(" OR ") | map(is_safe(.)) | any);
+            .[]
+            | .license as $L
+            | select(($L // "") != "")
+            | select(($L | test("GPL|AGPL|LGPL|SSPL"; "i")))
+            | select((has_safe_alt($L)) | not)
+            | "\(.name) \(.version) (\($L))"
+          ' /tmp/cargo-licenses.json)
           if [ -n "$DISALLOWED" ]; then
             echo "ERROR: disallowed licenses found in Cargo dependencies:"
             echo "$DISALLOWED"
@@ -254,7 +270,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
 

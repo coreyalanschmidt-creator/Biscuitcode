@@ -65,42 +65,55 @@ impl Default for OllamaProvider {
 
 #[async_trait]
 impl ModelProvider for OllamaProvider {
-    fn id(&self) -> &'static str { "ollama" }
-    fn display_name(&self) -> &'static str { "Ollama" }
-    fn supports_tools(&self) -> bool { true } // model-dependent; checked per-model
-    fn supports_vision(&self) -> bool { true } // gemma4 multimodal
-    fn supports_thinking(&self) -> bool { false }
-    fn supports_prompt_caching(&self) -> bool { false }
+    fn id(&self) -> &'static str {
+        "ollama"
+    }
+    fn display_name(&self) -> &'static str {
+        "Ollama"
+    }
+    fn supports_tools(&self) -> bool {
+        true
+    } // model-dependent; checked per-model
+    fn supports_vision(&self) -> bool {
+        true
+    } // gemma4 multimodal
+    fn supports_thinking(&self) -> bool {
+        false
+    }
+    fn supports_prompt_caching(&self) -> bool {
+        false
+    }
 
     async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError> {
         let url = format!("{}/api/tags", self.base_url);
-        let resp = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| {
-                if e.is_connect() {
-                    ProviderError::OllamaDaemonDown { endpoint: url.clone() }
-                } else {
-                    ProviderError::Network { reason: e.to_string() }
+        let resp = self.client.get(&url).send().await.map_err(|e| {
+            if e.is_connect() {
+                ProviderError::OllamaDaemonDown {
+                    endpoint: url.clone(),
                 }
-            })?;
+            } else {
+                ProviderError::Network {
+                    reason: e.to_string(),
+                }
+            }
+        })?;
 
         if !resp.status().is_success() {
             return Err(ProviderError::OllamaDaemonDown { endpoint: url });
         }
 
-        let body: Value = resp
-            .json()
-            .await
-            .map_err(|e| ProviderError::ParseError { reason: e.to_string() })?;
+        let body: Value = resp.json().await.map_err(|e| ProviderError::ParseError {
+            reason: e.to_string(),
+        })?;
 
         let models_arr = body["models"].as_array().cloned().unwrap_or_default();
 
         // Determine if any gemma4 variant is present for legacy-flagging gemma3.
         let has_gemma4 = models_arr.iter().any(|m| {
-            m["name"].as_str().map(|n| n.starts_with("gemma4:")).unwrap_or(false)
+            m["name"]
+                .as_str()
+                .map(|n| n.starts_with("gemma4:"))
+                .unwrap_or(false)
         });
 
         let infos: Vec<ModelInfo> = models_arr
@@ -131,10 +144,8 @@ impl ModelProvider for OllamaProvider {
         messages: Vec<Message>,
         tools: Vec<ToolSpec>,
         opts: ChatOptions,
-    ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<ChatEvent, ProviderError>> + Send>>,
-        ProviderError,
-    > {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatEvent, ProviderError>> + Send>>, ProviderError>
+    {
         let body = build_request_body(&messages, &tools, &opts);
         debug!(model = %opts.model, "ollama chat_stream request");
 
@@ -147,26 +158,36 @@ impl ModelProvider for OllamaProvider {
             .await
             .map_err(|e| {
                 if e.is_connect() {
-                    ProviderError::OllamaDaemonDown { endpoint: format!("{}/api/chat", self.base_url) }
+                    ProviderError::OllamaDaemonDown {
+                        endpoint: format!("{}/api/chat", self.base_url),
+                    }
                 } else {
-                    ProviderError::Network { reason: e.to_string() }
+                    ProviderError::Network {
+                        reason: e.to_string(),
+                    }
                 }
             })?;
 
         let status = resp.status();
         if status.is_server_error() {
             let msg = resp.text().await.unwrap_or_default();
-            return Err(ProviderError::ServerError { status: status.as_u16(), message: msg });
+            return Err(ProviderError::ServerError {
+                status: status.as_u16(),
+                message: msg,
+            });
         }
         if status.is_client_error() {
             let msg = resp.text().await.unwrap_or_default();
-            return Err(ProviderError::BadRequest { status: status.as_u16(), message: msg });
+            return Err(ProviderError::BadRequest {
+                status: status.as_u16(),
+                message: msg,
+            });
         }
 
         // Compile XML fallback regex once. Regex::new is cheap; lifetime in stream
         // requires it to be moved in.
-        let xml_re = Regex::new(r"(?s)<tool_call>(.*?)</tool_call>")
-            .expect("static regex is valid");
+        let xml_re =
+            Regex::new(r"(?s)<tool_call>(.*?)</tool_call>").expect("static regex is valid");
 
         let mut byte_stream = resp.bytes_stream();
 
@@ -313,16 +334,19 @@ pub(crate) fn build_request_body(
 
     if !tools.is_empty() {
         // Ollama accepts tools in OpenAI function-call format.
-        let tools_arr: Vec<Value> = tools.iter().map(|t| {
-            json!({
-                "type": "function",
-                "function": {
-                    "name": t.name,
-                    "description": t.description,
-                    "parameters": t.input_schema,
-                }
+        let tools_arr: Vec<Value> = tools
+            .iter()
+            .map(|t| {
+                json!({
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.input_schema,
+                    }
+                })
             })
-        }).collect();
+            .collect();
         body["tools"] = json!(tools_arr);
     }
 
@@ -342,16 +366,37 @@ fn encode_message(msg: &Message) -> Value {
             json!({ "role": "tool", "content": content })
         }
         Role::Assistant => {
-            let text: String = msg.content.iter().filter_map(|b| {
-                if let ContentBlock::Text { text } = b { Some(text.as_str()) } else { None }
-            }).collect::<Vec<_>>().join("");
+            let text: String = msg
+                .content
+                .iter()
+                .filter_map(|b| {
+                    if let ContentBlock::Text { text } = b {
+                        Some(text.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("");
             json!({ "role": "assistant", "content": text })
         }
         Role::User | Role::System => {
-            let text: String = msg.content.iter().filter_map(|b| {
-                if let ContentBlock::Text { text } = b { Some(text.as_str()) } else { None }
-            }).collect::<Vec<_>>().join("");
-            let role = match msg.role { Role::System => "system", _ => "user" };
+            let text: String = msg
+                .content
+                .iter()
+                .filter_map(|b| {
+                    if let ContentBlock::Text { text } = b {
+                        Some(text.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("");
+            let role = match msg.role {
+                Role::System => "system",
+                _ => "user",
+            };
             json!({ "role": role, "content": text })
         }
     }
@@ -363,10 +408,10 @@ fn encode_message(msg: &Message) -> Value {
 /// Returns the preferred Gemma 4 tag for the given total system RAM (in GB).
 pub fn gemma4_tag_for_ram_gb(ram_gb: u32) -> &'static str {
     match ram_gb {
-        0..=7   => "gemma4:e2b",
-        8..=31  => "gemma4:e4b",
+        0..=7 => "gemma4:e2b",
+        8..=31 => "gemma4:e4b",
         32..=47 => "gemma4:26b",
-        _       => "gemma4:31b",
+        _ => "gemma4:31b",
     }
 }
 
@@ -374,18 +419,22 @@ pub fn gemma4_tag_for_ram_gb(ram_gb: u32) -> &'static str {
 /// `gemma4:*` tags (< 0.20.0). Only used in the E007 fallback path.
 pub fn gemma3_fallback_for_ram_gb(ram_gb: u32) -> &'static str {
     match ram_gb {
-        0..=5   => "gemma3:1b",
-        6..=11  => "gemma3:4b",
+        0..=5 => "gemma3:1b",
+        6..=11 => "gemma3:4b",
         12..=23 => "gemma3:4b",
         24..=31 => "gemma3:12b",
-        _       => "gemma3:27b",
+        _ => "gemma3:27b",
     }
 }
 
 /// Agent-mode preferred model when RAM allows — qwen2.5-coder has the
 /// most stable tool-calling on Ollama (verified by research-r2).
 pub fn agent_mode_preferred(ram_gb: u32) -> Option<&'static str> {
-    if ram_gb >= 12 { Some("qwen2.5-coder:7b") } else { None }
+    if ram_gb >= 12 {
+        Some("qwen2.5-coder:7b")
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -396,8 +445,8 @@ mod tests {
 
     #[test]
     fn gemma4_tier_table_matches_plan() {
-        assert_eq!(gemma4_tag_for_ram_gb(4),  "gemma4:e2b");
-        assert_eq!(gemma4_tag_for_ram_gb(8),  "gemma4:e4b");
+        assert_eq!(gemma4_tag_for_ram_gb(4), "gemma4:e2b");
+        assert_eq!(gemma4_tag_for_ram_gb(8), "gemma4:e4b");
         assert_eq!(gemma4_tag_for_ram_gb(16), "gemma4:e4b");
         assert_eq!(gemma4_tag_for_ram_gb(32), "gemma4:26b");
         assert_eq!(gemma4_tag_for_ram_gb(64), "gemma4:31b");
@@ -405,15 +454,15 @@ mod tests {
 
     #[test]
     fn gemma3_fallback_keys_match_plan() {
-        assert_eq!(gemma3_fallback_for_ram_gb(4),  "gemma3:1b");
-        assert_eq!(gemma3_fallback_for_ram_gb(8),  "gemma3:4b");
+        assert_eq!(gemma3_fallback_for_ram_gb(4), "gemma3:1b");
+        assert_eq!(gemma3_fallback_for_ram_gb(8), "gemma3:4b");
         assert_eq!(gemma3_fallback_for_ram_gb(16), "gemma3:4b");
         assert_eq!(gemma3_fallback_for_ram_gb(32), "gemma3:27b");
     }
 
     #[test]
     fn agent_mode_alt_only_when_ram_allows() {
-        assert_eq!(agent_mode_preferred(8),  None);
+        assert_eq!(agent_mode_preferred(8), None);
         assert_eq!(agent_mode_preferred(12), Some("qwen2.5-coder:7b"));
         assert_eq!(agent_mode_preferred(64), Some("qwen2.5-coder:7b"));
     }
@@ -448,7 +497,10 @@ mod tests {
             .await;
 
         let p = OllamaProvider::with_base_url(server.uri());
-        let opts = ChatOptions { model: "gemma4:e4b".into(), ..Default::default() };
+        let opts = ChatOptions {
+            model: "gemma4:e4b".into(),
+            ..Default::default()
+        };
         let mut stream = p.chat_stream(vec![], vec![], opts).await.unwrap();
 
         let mut text = String::new();
@@ -474,7 +526,8 @@ mod tests {
     async fn xml_tag_fallback_emits_tool_call_events() {
         let server = MockServer::start().await;
 
-        let xml_content = r#"<tool_call>{"name":"read_file","arguments":{"path":"src/main.rs"}}</tool_call>"#;
+        let xml_content =
+            r#"<tool_call>{"name":"read_file","arguments":{"path":"src/main.rs"}}</tool_call>"#;
         let body = format!(
             "{{\"message\":{{\"role\":\"assistant\",\"content\":\"{content}\"}},\"done\":false}}\n\
              {{\"done\":true,\"done_reason\":\"stop\",\"prompt_eval_count\":1,\"eval_count\":1}}\n",
@@ -492,7 +545,10 @@ mod tests {
             .await;
 
         let p = OllamaProvider::with_base_url(server.uri());
-        let opts = ChatOptions { model: "gemma3:4b".into(), ..Default::default() };
+        let opts = ChatOptions {
+            model: "gemma3:4b".into(),
+            ..Default::default()
+        };
         let mut stream = p.chat_stream(vec![], vec![], opts).await.unwrap();
 
         let mut events = Vec::new();
@@ -500,10 +556,18 @@ mod tests {
             events.push(ev.unwrap());
         }
 
-        let start = events.iter().find(|e| matches!(e, ChatEvent::ToolCallStart { name, .. } if name == "read_file"));
-        assert!(start.is_some(), "expected ToolCallStart for read_file; got {events:?}");
+        let start = events
+            .iter()
+            .find(|e| matches!(e, ChatEvent::ToolCallStart { name, .. } if name == "read_file"));
+        assert!(
+            start.is_some(),
+            "expected ToolCallStart for read_file; got {events:?}"
+        );
         let end = events.iter().find(|e| matches!(e, ChatEvent::ToolCallEnd { args_json, .. } if args_json.contains("main.rs")));
-        assert!(end.is_some(), "expected ToolCallEnd with args containing main.rs; got {events:?}");
+        assert!(
+            end.is_some(),
+            "expected ToolCallEnd with args containing main.rs; got {events:?}"
+        );
     }
 
     /// Native tool_calls in structured format (Gemma 4 / qwen2.5-coder).
@@ -529,7 +593,10 @@ mod tests {
             .await;
 
         let p = OllamaProvider::with_base_url(server.uri());
-        let opts = ChatOptions { model: "gemma4:e4b".into(), ..Default::default() };
+        let opts = ChatOptions {
+            model: "gemma4:e4b".into(),
+            ..Default::default()
+        };
         let mut stream = p.chat_stream(vec![], vec![], opts).await.unwrap();
 
         let mut events = Vec::new();
@@ -537,10 +604,20 @@ mod tests {
             events.push(ev.unwrap());
         }
 
-        let start = events.iter().find(|e| matches!(e, ChatEvent::ToolCallStart { name, .. } if name == "search_code"));
-        assert!(start.is_some(), "expected ToolCallStart for search_code; got {events:?}");
-        let end = events.iter().find(|e| matches!(e, ChatEvent::ToolCallEnd { args_json, .. } if args_json.contains("TODO")));
-        assert!(end.is_some(), "expected ToolCallEnd with TODO in args; got {events:?}");
+        let start = events
+            .iter()
+            .find(|e| matches!(e, ChatEvent::ToolCallStart { name, .. } if name == "search_code"));
+        assert!(
+            start.is_some(),
+            "expected ToolCallStart for search_code; got {events:?}"
+        );
+        let end = events.iter().find(
+            |e| matches!(e, ChatEvent::ToolCallEnd { args_json, .. } if args_json.contains("TODO")),
+        );
+        assert!(
+            end.is_some(),
+            "expected ToolCallEnd with TODO in args; got {events:?}"
+        );
     }
 
     /// list_models: daemon down → OllamaDaemonDown error.
@@ -549,8 +626,13 @@ mod tests {
         // No mock server; connection refused.
         let p = OllamaProvider::with_base_url("http://127.0.0.1:1".into());
         let err = p.list_models().await.unwrap_err();
-        assert!(matches!(err, ProviderError::OllamaDaemonDown { .. } | ProviderError::Network { .. }),
-            "expected daemon-down or network error; got {err:?}");
+        assert!(
+            matches!(
+                err,
+                ProviderError::OllamaDaemonDown { .. } | ProviderError::Network { .. }
+            ),
+            "expected daemon-down or network error; got {err:?}"
+        );
     }
 
     /// list_models: parses /api/tags response, marks gemma3 legacy when gemma4 present.

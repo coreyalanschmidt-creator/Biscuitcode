@@ -8,10 +8,10 @@
 use std::sync::Arc;
 
 use serde::Deserialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
 use biscuitcode_agent::executor::confirmation::{Decision, PendingConfirmations};
-use biscuitcode_db::{ConversationId, Database, MessageId};
+use biscuitcode_db::{ConversationId, MessageId};
 
 use super::chat::ChatDb;
 

@@ -72,7 +72,9 @@ fn normalize_path(path: &std::path::Path) -> PathBuf {
     let mut out = PathBuf::new();
     for c in path.components() {
         match c {
-            std::path::Component::ParentDir => { out.pop(); }
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
             std::path::Component::CurDir => {}
             other => out.push(other),
         }
@@ -85,10 +87,9 @@ impl Tool for WriteFileTool {
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: self.name().to_string(),
-            description:
-                "Write (create or overwrite) a file in the workspace. Requires \
+            description: "Write (create or overwrite) a file in the workspace. Requires \
                  user confirmation unless workspace trust is enabled."
-                    .to_string(),
+                .to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -120,8 +121,8 @@ impl Tool for WriteFileTool {
         args: serde_json::Value,
         ctx: &ToolCtx,
     ) -> Result<ToolResult, ToolError> {
-        let args: Args = serde_json::from_value(args)
-            .map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
+        let args: Args =
+            serde_json::from_value(args).map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
 
         let path = resolve_write_path(&ctx.workspace_root, &args.path);
 
@@ -139,9 +140,7 @@ impl Tool for WriteFileTool {
 
         // Create parent directories if needed.
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .await
-                .map_err(ToolError::Io)?;
+            fs::create_dir_all(parent).await.map_err(ToolError::Io)?;
         }
 
         fs::write(&path, args.contents.as_bytes())
@@ -197,7 +196,10 @@ mod tests {
         tool.execute(json!({ "path": "f.txt", "contents": "new content" }), &ctx)
             .await
             .unwrap();
-        assert_eq!(std::fs::read_to_string(dir.path().join("f.txt")).unwrap(), "new content");
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
+            "new content"
+        );
     }
 
     #[tokio::test]
@@ -228,7 +230,10 @@ mod tests {
         let tool = WriteFileTool;
         let ctx = make_ctx(&dir);
         let err = tool
-            .execute(json!({ "path": "../../etc/passwd", "contents": "evil" }), &ctx)
+            .execute(
+                json!({ "path": "../../etc/passwd", "contents": "evil" }),
+                &ctx,
+            )
             .await;
         assert!(
             matches!(err, Err(ToolError::OutsideWorkspace { .. })),
@@ -253,7 +258,10 @@ mod tests {
         let tool = WriteFileTool;
         let ctx = make_ctx(&dir);
         let err = tool
-            .execute(json!({ "path": "node_modules/evil.js", "contents": "x" }), &ctx)
+            .execute(
+                json!({ "path": "node_modules/evil.js", "contents": "x" }),
+                &ctx,
+            )
             .await;
         assert!(matches!(err, Err(ToolError::Forbidden(_))));
     }

@@ -50,11 +50,7 @@ pub struct SnapshotManifest {
 }
 
 /// Directory for snapshots: `~/.cache/biscuitcode/snapshots/{conv_id}/{msg_id}/`
-pub fn snapshot_dir(
-    cache_root: &Path,
-    conversation_id: &str,
-    message_id: &str,
-) -> PathBuf {
+pub fn snapshot_dir(cache_root: &Path, conversation_id: &str, message_id: &str) -> PathBuf {
     cache_root
         .join("snapshots")
         .join(conversation_id)
@@ -65,8 +61,8 @@ pub fn snapshot_dir(
 /// Uses `__` as separator so `/home/user/src/main.rs` →
 /// `path__home__user__src__main.rs.bak`.
 pub fn bak_filename(abs_path: &str) -> String {
-    let safe = abs_path.replace('/', "__").replace('\\', "__");
-    format!("{}.bak", safe)
+    let safe = abs_path.replace(['/', '\\'], "__");
+    format!("{safe}.bak")
 }
 
 fn hex_sha256(bytes: &[u8]) -> String {
@@ -90,7 +86,11 @@ pub enum RewindError {
     #[error("failed to restore {path}: {reason}")]
     FileFailed { path: String, reason: String },
     #[error("sha256 mismatch for {path}: expected {expected}, got {actual}")]
-    HashMismatch { path: String, expected: String, actual: String },
+    HashMismatch {
+        path: String,
+        expected: String,
+        actual: String,
+    },
     #[error("manifest load failed: {0}")]
     ManifestLoad(String),
     #[error("io: {0}")]
@@ -205,11 +205,10 @@ pub async fn take(
 /// Load a manifest from a snapshot directory.
 pub async fn load_manifest(snapshot_dir: &Path) -> Result<SnapshotManifest, RewindError> {
     let path = snapshot_dir.join("manifest.json");
-    let bytes = fs::read(&path).await.map_err(|e| {
-        RewindError::ManifestLoad(format!("{}: {}", path.display(), e))
-    })?;
-    serde_json::from_slice(&bytes)
-        .map_err(|e| RewindError::ManifestLoad(e.to_string()))
+    let bytes = fs::read(&path)
+        .await
+        .map_err(|e| RewindError::ManifestLoad(format!("{}: {}", path.display(), e)))?;
+    serde_json::from_slice(&bytes).map_err(|e| RewindError::ManifestLoad(e.to_string()))
 }
 
 /// Restore all files referenced by a manifest.
@@ -219,10 +218,7 @@ pub async fn load_manifest(snapshot_dir: &Path) -> Result<SnapshotManifest, Rewi
 ///
 /// On first failure, returns `Err(RewindError::FileFailed {...})` and leaves
 /// any already-restored files in their restored state.
-pub async fn restore(
-    snapshot_dir: &Path,
-    manifest: &SnapshotManifest,
-) -> Result<(), RewindError> {
+pub async fn restore(snapshot_dir: &Path, manifest: &SnapshotManifest) -> Result<(), RewindError> {
     for entry in &manifest.files {
         let target = Path::new(&entry.abs_path);
 
@@ -241,12 +237,14 @@ pub async fn restore(
         }
 
         // File existed before — restore from .bak.
-        let bak_name = entry.snapshot_filename.as_deref().ok_or_else(|| {
-            RewindError::FileFailed {
-                path: entry.abs_path.clone(),
-                reason: "pre_existed=true but snapshot_filename is null".to_string(),
-            }
-        })?;
+        let bak_name =
+            entry
+                .snapshot_filename
+                .as_deref()
+                .ok_or_else(|| RewindError::FileFailed {
+                    path: entry.abs_path.clone(),
+                    reason: "pre_existed=true but snapshot_filename is null".to_string(),
+                })?;
 
         let bak_path = snapshot_dir.join(bak_name);
         if !bak_path.exists() {
@@ -256,10 +254,12 @@ pub async fn restore(
             });
         }
 
-        let bak_bytes = fs::read(&bak_path).await.map_err(|e| RewindError::FileFailed {
-            path: entry.abs_path.clone(),
-            reason: format!("reading backup: {e}"),
-        })?;
+        let bak_bytes = fs::read(&bak_path)
+            .await
+            .map_err(|e| RewindError::FileFailed {
+                path: entry.abs_path.clone(),
+                reason: format!("reading backup: {e}"),
+            })?;
 
         // Verify sha256 of the backup matches what we recorded.
         if let Some(expected_sha) = &entry.pre_sha256 {
@@ -276,10 +276,12 @@ pub async fn restore(
         // Atomic rename: write to a .tmp sibling, then rename to target.
         // Ensure the parent directory exists.
         if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent).await.map_err(|e| RewindError::FileFailed {
-                path: entry.abs_path.clone(),
-                reason: format!("create parent dirs: {e}"),
-            })?;
+            fs::create_dir_all(parent)
+                .await
+                .map_err(|e| RewindError::FileFailed {
+                    path: entry.abs_path.clone(),
+                    reason: format!("create parent dirs: {e}"),
+                })?;
         }
 
         let tmp_path = {
@@ -331,7 +333,7 @@ mod tests {
 
         let sd = make_cache_and_snap(&dir, "conv_1", "msg_1");
 
-        let manifest = take(&sd, &[file.clone()], "tc_001", "write_file")
+        let manifest = take(&sd, std::slice::from_ref(&file), "tc_001", "write_file")
             .await
             .expect("snapshot should succeed");
 
@@ -376,7 +378,10 @@ mod tests {
         let loaded = load_manifest(&sd).await.unwrap();
         for entry in &loaded.files {
             if let Some(bak) = &entry.snapshot_filename {
-                assert!(sd.join(bak).exists(), "manifest references nonexistent bak: {bak}");
+                assert!(
+                    sd.join(bak).exists(),
+                    "manifest references nonexistent bak: {bak}"
+                );
             }
         }
         let _ = manifest;
@@ -391,7 +396,7 @@ mod tests {
         std::fs::write(&file, b"fn original() {}").unwrap();
 
         let sd = make_cache_and_snap(&dir, "conv_4", "msg_4");
-        let _manifest = take(&sd, &[file.clone()], "tc_004", "write_file")
+        let _manifest = take(&sd, std::slice::from_ref(&file), "tc_004", "write_file")
             .await
             .unwrap();
 
@@ -415,7 +420,7 @@ mod tests {
 
         let sd = make_cache_and_snap(&dir, "conv_5", "msg_5");
         // Snapshot before: file doesn't exist.
-        let _manifest = take(&sd, &[new_file.clone()], "tc_005", "write_file")
+        let _manifest = take(&sd, std::slice::from_ref(&new_file), "tc_005", "write_file")
             .await
             .unwrap();
 
@@ -436,7 +441,7 @@ mod tests {
         std::fs::write(&file, b"original").unwrap();
 
         let sd = make_cache_and_snap(&dir, "conv_6", "msg_6");
-        let manifest = take(&sd, &[file.clone()], "tc_006", "write_file")
+        let manifest = take(&sd, std::slice::from_ref(&file), "tc_006", "write_file")
             .await
             .unwrap();
 
@@ -466,9 +471,14 @@ mod tests {
         std::fs::write(&b, b"bbb").unwrap();
 
         let sd = make_cache_and_snap(&dir, "conv_7", "msg_7");
-        let _m = take(&sd, &[a.clone(), b.clone(), c.clone()], "tc_007", "write_file")
-            .await
-            .unwrap();
+        let _m = take(
+            &sd,
+            &[a.clone(), b.clone(), c.clone()],
+            "tc_007",
+            "write_file",
+        )
+        .await
+        .unwrap();
 
         // Tool modifies a and b, creates c.
         std::fs::write(&a, b"AAA").unwrap();

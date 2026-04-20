@@ -11,7 +11,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use biscuitcode_lsp::{FrameEmitter, Language, LspRegistry, SessionId, SessionInfo};
+use biscuitcode_lsp::{Language, LspRegistry, SessionId, SessionInfo};
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State};
 
@@ -58,18 +58,26 @@ pub fn lsp_spawn(
 
     // Build the emit closure: emits `lsp-msg-in-<session_id>` Tauri events.
     let app_clone = app.clone();
-    let emit_frame: biscuitcode_lsp::FrameEmitter = Arc::new(move |id: SessionId, frame: serde_json::Value| {
-        let event_name = format!("lsp-msg-in-{}", id.0);
-        let _ = app_clone.emit(&event_name, LspMsgPayload {
-            session_id: id.0.clone(),
-            frame,
+    let emit_frame: biscuitcode_lsp::FrameEmitter =
+        Arc::new(move |id: SessionId, frame: serde_json::Value| {
+            let event_name = format!("lsp-msg-in-{}", id.0);
+            let _ = app_clone.emit(
+                &event_name,
+                LspMsgPayload {
+                    session_id: id.0.clone(),
+                    frame,
+                },
+            );
         });
-    });
 
     let registry = state.0.lock().unwrap();
     match registry.spawn(language, workspace_root, emit_frame) {
         Ok(session_id) => Ok(session_id.0),
-        Err(biscuitcode_lsp::LspError::ServerMissing { language: lang, install_command, .. }) => {
+        Err(biscuitcode_lsp::LspError::ServerMissing {
+            language: lang,
+            install_command,
+            ..
+        }) => {
             // Structured error string for frontend toast.
             Err(format!("E013:{}:{}", lang, install_command))
         }
@@ -94,7 +102,10 @@ pub async fn lsp_write(
         let registry = state.0.lock().unwrap();
         registry.get_sender(&id).map_err(|e| e.to_string())?
     };
-    sender.send(serialized).await.map_err(|_| "session channel closed".to_string())
+    sender
+        .send(serialized)
+        .await
+        .map_err(|_| "session channel closed".to_string())
 }
 
 /// Shut down an LSP session.
@@ -102,10 +113,7 @@ pub async fn lsp_write(
 /// Sends shutdown + exit messages outside the registry lock, then removes
 /// the session from the map.
 #[tauri::command]
-pub async fn lsp_shutdown(
-    session_id: String,
-    state: State<'_, LspState>,
-) -> Result<(), String> {
+pub async fn lsp_shutdown(session_id: String, state: State<'_, LspState>) -> Result<(), String> {
     let id = SessionId(session_id);
     let sender = {
         let registry = state.0.lock().unwrap();
@@ -150,8 +158,14 @@ mod tests {
     #[test]
     fn parse_language_variants() {
         assert!(matches!(parse_language("rust"), Ok(Language::Rust)));
-        assert!(matches!(parse_language("typescript"), Ok(Language::Typescript)));
-        assert!(matches!(parse_language("javascript"), Ok(Language::Typescript)));
+        assert!(matches!(
+            parse_language("typescript"),
+            Ok(Language::Typescript)
+        ));
+        assert!(matches!(
+            parse_language("javascript"),
+            Ok(Language::Typescript)
+        ));
         assert!(matches!(parse_language("python"), Ok(Language::Python)));
         assert!(matches!(parse_language("go"), Ok(Language::Go)));
         assert!(matches!(parse_language("cpp"), Ok(Language::Cpp)));
@@ -161,6 +175,9 @@ mod tests {
     #[test]
     fn parse_language_case_insensitive() {
         assert!(matches!(parse_language("RUST"), Ok(Language::Rust)));
-        assert!(matches!(parse_language("TypeScript"), Ok(Language::Typescript)));
+        assert!(matches!(
+            parse_language("TypeScript"),
+            Ok(Language::Typescript)
+        ));
     }
 }

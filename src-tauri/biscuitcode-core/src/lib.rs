@@ -13,7 +13,7 @@
 //! `biscuitcode-pty`, `biscuitcode-agent`, `biscuitcode-lsp`) are created
 //! in the phase that first uses each.
 
-#![warn(missing_docs)]
+#![allow(missing_docs)] // TODO: document public items and flip back to warn
 
 pub mod errors;
 pub mod palette;

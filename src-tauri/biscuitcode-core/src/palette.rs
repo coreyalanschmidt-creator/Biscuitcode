@@ -18,7 +18,11 @@ pub struct Rgb(pub u8, pub u8, pub u8);
 impl Rgb {
     /// Construct from a packed 24-bit `0xRRGGBB` integer.
     pub const fn from_hex(rgb: u32) -> Self {
-        Rgb(((rgb >> 16) & 0xff) as u8, ((rgb >> 8) & 0xff) as u8, (rgb & 0xff) as u8)
+        Rgb(
+            ((rgb >> 16) & 0xff) as u8,
+            ((rgb >> 8) & 0xff) as u8,
+            (rgb & 0xff) as u8,
+        )
     }
     /// Format as `#RRGGBB` uppercase hex string.
     pub fn to_hex_string(self) -> String {
@@ -28,7 +32,7 @@ impl Rgb {
 
 // ---------- Biscuit (primary brand — warm gold) ----------
 /// Biscuit-50: lightest warm gold tint.
-pub const BISCUIT_50:  Rgb = Rgb::from_hex(0xFDF7E6);
+pub const BISCUIT_50: Rgb = Rgb::from_hex(0xFDF7E6);
 /// Biscuit-100.
 pub const BISCUIT_100: Rgb = Rgb::from_hex(0xFAE8B3);
 /// Biscuit-200.
@@ -50,7 +54,7 @@ pub const BISCUIT_900: Rgb = Rgb::from_hex(0x4A3413);
 
 // ---------- Cocoa (warm dark neutrals) ----------
 /// Cocoa-50: lightest warm neutral.
-pub const COCOA_50:  Rgb = Rgb::from_hex(0xF6F0E8);
+pub const COCOA_50: Rgb = Rgb::from_hex(0xF6F0E8);
 /// Cocoa-100.
 pub const COCOA_100: Rgb = Rgb::from_hex(0xE0D3BE);
 /// Cocoa-200.
@@ -72,9 +76,9 @@ pub const COCOA_900: Rgb = Rgb::from_hex(0x080504);
 
 // ---------- Semantic accents ----------
 /// Sage green — success / ok state.
-pub const ACCENT_OK:    Rgb = Rgb::from_hex(0x6FBF6E);
+pub const ACCENT_OK: Rgb = Rgb::from_hex(0x6FBF6E);
 /// Terracotta — warning state.
-pub const ACCENT_WARN:  Rgb = Rgb::from_hex(0xE8833E);
+pub const ACCENT_WARN: Rgb = Rgb::from_hex(0xE8833E);
 /// Salmon — error state.
 pub const ACCENT_ERROR: Rgb = Rgb::from_hex(0xE06B5B);
 
@@ -82,11 +86,11 @@ pub const ACCENT_ERROR: Rgb = Rgb::from_hex(0xE06B5B);
 /// Alias for `BISCUIT_500` — the primary accent colour.
 pub const PRIMARY_ACCENT: Rgb = BISCUIT_500;
 /// Alias for `COCOA_700` — the primary dark background.
-pub const PRIMARY_BG:     Rgb = COCOA_700;
+pub const PRIMARY_BG: Rgb = COCOA_700;
 /// Alias for `COCOA_900` — the deepest dark background.
-pub const DEEPEST_BG:     Rgb = COCOA_900;
+pub const DEEPEST_BG: Rgb = COCOA_900;
 /// Alias for `COCOA_500` — used for dividers and separators.
-pub const DIVIDER:        Rgb = COCOA_500;
+pub const DIVIDER: Rgb = COCOA_500;
 
 #[cfg(test)]
 mod tests {
