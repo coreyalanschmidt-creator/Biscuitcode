@@ -132,8 +132,8 @@ jobs:
             ### AppImage (portable)
             ```
             sudo apt install libfuse2t64
-            chmod +x BiscuitCode-<version>-x86_64.AppImage
-            ./BiscuitCode-<version>-x86_64.AppImage
+            chmod +x BiscuitCode_<version>_amd64.AppImage
+            ./BiscuitCode_<version>_amd64.AppImage
             ```
 
             ### Known limitations in this release
@@ -186,7 +186,7 @@ jobs:
         run: |
           # Tauri-action puts artifacts in src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/
           DEB_PATH=$(find src-tauri/target -name "BiscuitCode_*.deb" | head -1)
-          APPIMAGE_PATH=$(find src-tauri/target -name "BiscuitCode-*.AppImage" | head -1)
+          APPIMAGE_PATH=$(find src-tauri/target -name "BiscuitCode_*.AppImage" | head -1)
 
           if [ -z "$DEB_PATH" ] || [ -z "$APPIMAGE_PATH" ]; then
             echo "ERROR: Could not locate built artifacts."
