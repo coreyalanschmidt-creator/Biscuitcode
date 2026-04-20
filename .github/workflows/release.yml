@@ -147,11 +147,37 @@ jobs:
       # GPG-sign both artifacts and generate SHA256SUMS.
       # Runs after tauri-action uploads artifacts to the release.
       # ------------------------------------------------------------------
+      # The GPG_PRIVATE_KEY secret MUST be base64-encoded. Generate with:
+      #   gpg --armor --export-secret-keys <fingerprint> | base64 -w0 | xclip
+      # (or pipe to `pbcopy` on macOS). Then paste the single-line base64 blob
+      # into the GitHub repo secret named GPG_PRIVATE_KEY.
+      #
+      # Why base64: armored keys contain many newlines and occasional chars
+      # that GitHub's secret substitution can mangle when piped through `echo`
+      # or similar shells. base64 is single-line ASCII — round-trips cleanly.
       - name: Import GPG signing key
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
         run: |
-          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "ERROR: GPG_PRIVATE_KEY secret is empty. Set it under repo Settings → Secrets → Actions."
+            exit 1
+          fi
+          # Decode the base64-encoded key into a temp file (more robust than
+          # piping through echo/printf, which can drop trailing newlines).
+          TMP_KEY=$(mktemp)
+          trap 'rm -f "$TMP_KEY"' EXIT
+          printf '%s' "$GPG_PRIVATE_KEY" | base64 -d > "$TMP_KEY" 2>/dev/null || {
+            echo "ERROR: GPG_PRIVATE_KEY is not valid base64."
+            echo "Expected: gpg --armor --export-secret-keys <fp> | base64 -w0"
+            echo "Then paste the single-line blob into the GitHub secret."
+            exit 1
+          }
+          if ! head -c 1 "$TMP_KEY" | grep -q '^-'; then
+            echo "ERROR: decoded secret does not start with '-----BEGIN' — not an armored key."
+            exit 1
+          fi
+          gpg --batch --import "$TMP_KEY"
           echo "GPG key imported."
 
       - name: GPG-sign artifacts
