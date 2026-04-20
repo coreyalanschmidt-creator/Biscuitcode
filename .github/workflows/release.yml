@@ -225,13 +225,18 @@ jobs:
           APPIMAGE_SIG_FILE="${APPIMAGE_PATH}.sig"
 
           # The Tauri updater expects a minisign .sig file alongside the AppImage.
-          # tauri-action creates it when TAURI_SIGNING_PRIVATE_KEY is set.
-          # If it's missing (e.g., dry run), create a placeholder so the manifest
-          # at least has the correct shape.
+          # tauri-action creates it when TAURI_SIGNING_PRIVATE_KEY is set AND
+          # tauri.conf.json has bundle.createUpdaterArtifacts: true. If the .sig
+          # is missing, the updater would ship a broken manifest — fail loud.
           if [ -f "$APPIMAGE_SIG_FILE" ]; then
             SIG=$(cat "$APPIMAGE_SIG_FILE")
           else
-            SIG="PLACEHOLDER_run_tauri_sign_to_generate"
+            echo "ERROR: expected signature file $APPIMAGE_SIG_FILE not found."
+            echo "Check: (1) TAURI_SIGNING_PRIVATE_KEY secret is set and valid,"
+            echo "       (2) tauri.conf.json has bundle.createUpdaterArtifacts: true,"
+            echo "       (3) TAURI_SIGNING_PRIVATE_KEY_PASSWORD is set if the key is password-protected."
+            find src-tauri/target -name "*.sig" 2>/dev/null
+            exit 1
           fi
 
           DOWNLOAD_URL="https://github.com/Coreyalanschmidt-creator/biscuitcode/releases/download/${GITHUB_REF_NAME}/${APPIMAGE_FILENAME}"
@@ -258,6 +263,7 @@ jobs:
       - name: Upload signed artifacts
         uses: softprops/action-gh-release@v2
         with:
+          draft: true
           files: |
             ${{ env.DEB_PATH }}.asc
             ${{ env.APPIMAGE_PATH }}.asc
