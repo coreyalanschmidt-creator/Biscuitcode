@@ -271,7 +271,7 @@ Each decision cites the research section. Decisions marked **(synthesis)** depar
 | 3 | Editor + File Tree + Find/Replace | Complete | Medium | 2 |
 | 4 | Terminal (xterm.js + portable-pty) | Complete | Medium | 2 |
 | 5 | Keyring + Anthropic Provider + Chat Panel (virtualized E2E) | Complete | Medium | 2 |
-| 6a-i | Foundation verification + `agentStore.ts` | Not Started | Low | 5 |
+| 6a-i | Foundation verification + `agentStore.ts` | Complete | Low | 5 |
 | 6a-ii | Tauri command wiring + ChatEvent event bridge | Not Started | Medium | 6a-i |
 | 6a-iii | Ollama install flow + capability files + E007 + E019 | Not Started | Medium | 6a-ii |
 | 6a-iv | Cross-provider acceptance tests + @-mention + drag-drop | Not Started | Medium | 6a-iii |
@@ -810,13 +810,40 @@ The prior coder's partial work left three active failures. Before fixing them:
 
 **Dependencies:** Phase 5 (trait, providers skeleton, agent skeleton, AgentActivityPanel.tsx pre-staged).
 **Complexity:** Low.
-**Status:** Not Started.
+**Status:** Complete.
 
 **Split rationale:** The TypeScript build fails on the `agentStore` import before any Tauri wiring can be tested. Fixing this gap is the prerequisite for every other sub-phase. Keeping it separate from Tauri wiring (6a-ii) ensures the coder has a clean green build as the baseline for the more complex integration work that follows.
 
 #### Pre-Mortem
 
+[PM-01] `src/state/agentStore.ts` | plan-required action names (`addCard`, `updateCardArgs`, `completeCard`, `errorCard`) absent from pre-authored store | store was authored by Phase 6b coder using different names (`startCard`, `appendArgsDelta`, `endCard`); existing `agent-activity-panel.spec.tsx` uses those names; adding plan-required aliases must not rename or remove the old names or 18 existing tests break.
+
+[PM-02] `tests/unit/agentStore.spec.ts` | `AgentStore` interface not exported from `agentStore.ts` | plan requires `AgentStore` interface export for TypeScript consumers; if the interface is only implicit (inferred from `create<>()`) then `import { AgentStore }` in the test file will fail with "Module has no exported member 'AgentStore'".
+
+[PM-03] `pnpm check:i18n` | script name differs from plan | plan says `pnpm check:i18n`; `package.json` confirms this script exists; acceptable, but i18n script was observed to silently pass even with missing keys in earlier phases — if the script only checks that all keys referenced in code exist in `en.json` (not vice versa), adding no new `t('key')` calls means the check always passes regardless of content.
+
 #### Execution Notes
+
+**Files changed:**
+- `src/state/agentStore.ts` — added exported `AgentStore` interface (renamed from private `AgentState`), added four plan-required action aliases (`addCard`, `updateCardArgs`, `completeCard`, `errorCard`) with independent implementations alongside the existing primary names.
+- `tests/unit/agentStore.spec.ts` — new file; 6 tests covering all five plan-required actions plus a multi-card isolation check.
+- `docs/plan.md` — status updates (Phase Index + phase section).
+
+**Approach:** `agentStore.ts` was pre-authored by the Phase 6b coder with equivalent functionality under different names (`startCard`, `appendArgsDelta`, `endCard`). Rather than rename and break 18 existing tests, the plan-required aliases were added as independent implementations (not thin wrappers calling the old names, to avoid unexpected dispatch double-call in future refactors). The `AgentState` private interface was promoted to the exported `AgentStore` interface the plan requires. The TypeScript typecheck, i18n check, and full test suite (120 tests) all pass clean.
+
+**Pre-Mortem reconciliation:**
+[PM-01] CONFIRMED | `src/state/agentStore.ts` | plan-required action names absent | added four alias implementations alongside existing names; existing 18 tests remain green.
+[PM-02] AVOIDED   | `src/state/agentStore.ts` | `AgentStore` interface not exported | explicitly promoted `AgentState` to exported `AgentStore` interface before writing the test; `tsc --noEmit` confirms no import error.
+[PM-03] WRONG     | `pnpm check:i18n` | script name mismatch | script name is exactly `check:i18n` as stated; no new `t()` calls added so the check passes trivially as predicted, but the gate itself is valid.
+[UNPREDICTED] NONE | - | - | -
+
+**Deviations:** None from plan scope. The `addCard` / `updateCardArgs` / `completeCard` / `errorCard` implementations are independent rather than delegating to `startCard` etc., which prevents any future aliasing confusion.
+
+**New findings:** The `agentStore.ts` has two parallel sets of action names for the same operations. Phase 6a-ii coder should note that `ChatPanel.tsx` and `agent-activity-panel.spec.tsx` use the primary names (`startCard`, `appendArgsDelta`, `endCard`). No change is required in Phase 6a-ii unless it authors new code — if so, prefer the primary names for internal call sites.
+
+**Follow-ups:** The dual-name API in `agentStore.ts` is mild tech debt. After Phase 6a-iv is Complete, a cleanup PR could remove the older names and update `ChatPanel.tsx` and `agent-activity-panel.spec.tsx` to use `addCard`/`updateCardArgs`/`completeCard`/`errorCard` exclusively. Not done here per Law 3.
+
+Pre-existing flaky test observed: `tests/error-catalogue.spec.ts > E017` fails approximately 1-in-5 runs when the full suite runs concurrently. This failure exists with and without my changes (verified by stashing). Root cause appears to be test isolation: the toast trigger fires its event before the ToastLayer listener is registered in that test order. Not introduced by this phase; left for Phase 9 (a11y audit) or a standalone cleanup pass.
 
 ---
 

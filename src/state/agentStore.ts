@@ -27,7 +27,8 @@ export interface ToolCallCard {
   endedAt: number | null;
 }
 
-interface AgentState {
+/** Exported as AgentStore to match Phase 6a-i plan interface requirement. */
+export interface AgentStore {
   /** Whether the chat panel is in agent mode (auto-continues on tool calls). */
   agentMode: boolean;
   /** Active conversation id — set by ChatPanel when a conversation is created. */
@@ -35,7 +36,7 @@ interface AgentState {
   /** Ordered list of tool-call cards for the current session. */
   cards: ToolCallCard[];
 
-  // Actions
+  // Actions (primary names used throughout the codebase)
   setAgentMode: (on: boolean) => void;
   setConversationId: (id: string | null) => void;
   /** Called when a ToolCallStart event arrives. */
@@ -46,7 +47,20 @@ interface AgentState {
   endCard: (id: string, argsJson: string, result: string | null, error: boolean) => void;
   /** Reset cards (e.g. on new conversation). */
   clearCards: () => void;
+
+  // Phase 6a-i plan-required aliases
+  /** Alias for startCard — sets status:'running', argsJson:'', startedAt, endedAt:null. */
+  addCard: (id: string, name: string) => void;
+  /** Alias for appendArgsDelta. */
+  updateCardArgs: (id: string, delta: string) => void;
+  /** Alias for endCard with error:false. */
+  completeCard: (id: string, result: string) => void;
+  /** Alias for endCard with error:true and result:null. */
+  errorCard: (id: string, error: string) => void;
 }
+
+// Internal alias so create<> infers the full type.
+type AgentState = AgentStore;
 
 export const useAgentStore = create<AgentState>()((set) => ({
   agentMode: false,
@@ -96,4 +110,46 @@ export const useAgentStore = create<AgentState>()((set) => ({
     })),
 
   clearCards: () => set({ cards: [] }),
+
+  // Phase 6a-i plan-required aliases — delegate to primary implementations.
+  addCard: (id, name) =>
+    set((s) => ({
+      cards: [
+        ...s.cards,
+        {
+          id,
+          name,
+          argsJson: '',
+          result: null,
+          status: 'running' as ToolCallStatus,
+          startedAt: performance.now(),
+          endedAt: null,
+        },
+      ],
+    })),
+
+  updateCardArgs: (id, delta) =>
+    set((s) => ({
+      cards: s.cards.map((c) =>
+        c.id === id ? { ...c, argsJson: c.argsJson + delta } : c,
+      ),
+    })),
+
+  completeCard: (id, result) =>
+    set((s) => ({
+      cards: s.cards.map((c) =>
+        c.id === id
+          ? { ...c, result, status: 'ok' as ToolCallStatus, endedAt: performance.now() }
+          : c,
+      ),
+    })),
+
+  errorCard: (id, error) =>
+    set((s) => ({
+      cards: s.cards.map((c) =>
+        c.id === id
+          ? { ...c, result: error, status: 'error' as ToolCallStatus, endedAt: performance.now() }
+          : c,
+      ),
+    })),
 }));
