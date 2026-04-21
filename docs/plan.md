@@ -4,6 +4,58 @@
 
 ## Review Log
 
+### 2026-04-20 — Reviewer audit (Phase 6a sub-phase decomposition)
+
+**Trigger:** Phase 6a was decomposed into four sub-phases (6a-i through 6a-iv) by the planner. Fresh-context five-axis audit of those sub-phases only (Phases 0–5, 6b, 7–10 out of scope except where 6a creates inconsistencies).
+
+**Changes made (inline below):**
+
+**Issue A — Hardcoded test counts in 6a-i ACs will drift.**
+The 6a-i ACs assert `test result: ok. 10 passed` and `test result: ok. 11 passed` as literal output strings. These counts are accurate today (per research.md code inspection), but any new wiremock or unit test added before 6a-i runs will cause a spurious failure on the count assertion while the actual tests still pass. This is an un-auditable criterion: the coder cannot know in advance whether the count has changed without running the suite first.
+- **Fix:** ACs changed to assert `exits 0` without hardcoding the pass count. Parenthetical stating the expected composition is preserved as a comment (informational, not a gate).
+
+**Issue B — Phase Index row 6a-iv label is misleading.**
+The Phase Index says "Cross-provider acceptance tests + `supports_tools` fix" for 6a-iv, but the `supports_tools` fix is a 6a-iii deliverable (the `ollama/mod.rs` change). 6a-iv does not author that fix; it exercises it through the tests.
+- **Fix:** Index row 6a-iv label corrected to "Cross-provider acceptance tests + @-mention + drag-drop".
+
+**Issue C — 6a-iii `shell.json` snippet diverges from CAPABILITIES.md.**
+The plan says "Exact JSON from CAPABILITIES.md — no paraphrase" and then shows a 3-validator snippet that folds `serve` into the first regex alternation `(list|show|--version|serve)$`. CAPABILITIES.md has `serve` as a fourth separate validator object. The effect is equivalent for single-arg invocations, but the plan's instruction to copy verbatim and then show a divergent snippet is contradictory.
+- **Fix:** The inline snippet in 6a-iii is replaced with a note directing the coder to copy verbatim from CAPABILITIES.md rather than from the plan's inline example, which was abbreviated for readability.
+
+**Issue D — `http.json` capability instruction conflicts with Phase 5 deviation.**
+Phase 5 Execution Notes (Deviation #1) explicitly record that `http:default` was reverted because `tauri-plugin-http` is not installed and all API calls go via Rust reqwest — the webview HTTP capability is unused. The 6a-iii deliverable says to "add to the URL fetch allowlist" as if the capability is effective, without acknowledging this finding. A coder following the 6a-iii deliverable literally may add URLs to a capability file that has no effect, creating a false sense of security or wasting time debugging why the capability isn't working.
+- **Fix:** Added a warning note in 6a-iii referencing the Phase 5 deviation and directing the coder to inspect `src-tauri/capabilities/http.json` and Phase 5 Execution Notes before modifying the file; if all API calls remain via Rust reqwest, the file changes may be no-ops and should be documented as such in 6a-iii Execution Notes.
+
+**Issue E — 6a-iii Goal text names commands differently from its own Deliverables.**
+The Goal sentence says "Implement the `ollama_install` and `ollama_pull` Tauri commands" but the Deliverables specify `ollama_check_and_install` (not `ollama_install`). The coder should trust the Deliverables section over the Goal sentence.
+- **Fix:** Goal text corrected to match the Deliverables: `ollama_check_and_install` and `ollama_pull`.
+
+**Issue F — 6a-iv @-mention component existence is unverified.**
+6a-iv says "verify it is already present from the prior execution session or add it." Research.md §8 describes Phase 6a as an "integration phase, not an authoring phase" for the four major components, but @-mention is NOT listed among those pre-authored components. There is no evidence in research.md or the prior execution notes that @-mention exists. "Verify or add" is insufficient guidance — it forces the coder to make an assumption that affects scope.
+- **Fix:** Note added to 6a-iv directing the coder to assume @-mention is absent and budget authoring time; "verify it is already present or add it" changed to "author it if absent (assume absent — no evidence of prior implementation in research.md)."
+
+**Five-axis audit findings:**
+
+1. **Completeness — 1 gap (Issue F above).** Pre-Mortem sections are intentionally empty (coder fills them); this is acceptable per the pipeline spec. All four sub-phases have clear inputs and outputs. Non-functional requirements (WSL2, brand tokens, security posture) are honored. E019 slot confirmed clean against ERROR-CATALOGUE.md (E001–E018 in use; E019 is unclaimed).
+
+2. **Accuracy — 3 issues corrected (Issues C, D, E).** Gemma 4 tags (`gemma4:e2b/e4b/26b/31b`) and Ollama version floor (0.20.0) are correct throughout. Security posture honored: keys via keyring crate, no logging, `busctl` for detection. Namespace hygiene: all new Rust modules are in `biscuitcode-agent` or `biscuitcode-providers` (correct prefix). No `release.yml` modifications implied. No new speculative abstractions.
+
+3. **Consistency — 1 issue corrected (Issue B).** DAG 6a-i → 6a-ii → 6a-iii → 6a-iv is a valid linear sequence with no cycles. 6b depends on 6a-iv (correct). 8 depends on 6a-iv (correct, consistent with Phase Index). No orphans introduced.
+
+4. **Simplicity — 0 issues.** Sub-phases map cleanly to one output artifact or one integration seam. No abstractions introduced that aren't immediately used. The `ollama_select_model` pure function is not over-engineered (it's a lookup table, not a configurable strategy).
+
+5. **Verifiability — 1 issue corrected (Issue A).** After the fix, all ACs reference runnable commands, named test files, or concrete observable outputs. Manual smoke ACs specify a WSL2 context and exact invocation. The 18-test count reference in 6a-iv is informational (not a gate) — acceptable.
+
+**Pre-Mortem support by sub-phase:**
+- **6a-i: YES.** Concrete enough. Example predictions: [PM-01] `agentStore.ts` | `useAgentStore` not a default export, causing `AgentActivityPanel.tsx` to fail resolution despite the file existing | import named vs default mismatch. [PM-02] `cargo test -p biscuitcode-providers` | Ollama wiremock tests fail because the wiremock server's port binding races with the test thread | need `MockServer::start().await` in test setup.
+- **6a-ii: YES.** Example predictions: [PM-01] `agent_run` command | `Arc<AtomicBool>` as Tauri state conflicts with the existing `Arc<AtomicBool>` for `chat_send`'s pause if they share the same type key | must use a newtype wrapper. [PM-02] `listen("agent:event", handler)` in `ChatPanel.tsx` | listener leaks across component unmounts because the `unlisten` future is never awaited | need cleanup in `useEffect` return.
+- **6a-iii: YES.** Example predictions: [PM-01] `ollama_check_and_install` | `reqwest::get` inside a Tauri command blocks the async executor if the Ollama HTTP client is not using a Tokio runtime | need `#[tokio::main]` or confirm Tauri's runtime is Tokio. [PM-02] `shell.json` `ollama-install` entry | Tauri rejects the capability file because the piped shell string `curl ... | sh` contains `|` which some validator regexes escape differently | test `cargo tauri build` fails at capability compilation step.
+- **6a-iv: YES.** Example predictions: [PM-01] `agent-mode-demo.spec.ts` | Playwright test runner can't reach the wiremock server because the Tauri dev server and the wiremock server share a port | port conflict. [PM-02] `@`-mention picker | `invoke('fs_list_workspace_files', ...)` returns an error if no workspace is open, causing the picker to crash rather than show an empty list | need defensive `try/catch` with empty-list fallback.
+
+**Files modified by this review:** `docs/plan.md` only — Review Log (this entry), 6a-i ACs (Issue A), Phase Index row 6a-iv label (Issue B), 6a-iii deliverable `shell.json` note (Issue C), 6a-iii `http.json` warning (Issue D), 6a-iii Goal text (Issue E), 6a-iv `@`-mention instruction (Issue F).
+
+---
+
 ### 2026-04-19 — Reviewer audit (post-Phase-2 deviation integration)
 
 **Trigger:** Phase 2 coder raised Open Question Q17 (Debian package name drift) and reported that the i18n lint AC used non-existent `i18next-parser` flags replaced by `pnpm check:i18n`. Full five-axis audit performed with fresh context.
@@ -222,7 +274,7 @@ Each decision cites the research section. Decisions marked **(synthesis)** depar
 | 6a-i | Foundation verification + `agentStore.ts` | Not Started | Low | 5 |
 | 6a-ii | Tauri command wiring + ChatEvent event bridge | Not Started | Medium | 6a-i |
 | 6a-iii | Ollama install flow + capability files + E007 + E019 | Not Started | Medium | 6a-ii |
-| 6a-iv | Cross-provider acceptance tests + `supports_tools` fix | Not Started | Medium | 6a-iii |
+| 6a-iv | Cross-provider acceptance tests + @-mention + drag-drop | Not Started | Medium | 6a-iii |
 | 6b | Write Tools + Inline Edit (split-diff) + Rewind | Complete | High | 3, 6a-iv |
 | 7 | Git Panel + LSP Client + Preview Panel | Complete | High | 3 |
 | 8 | Onboarding + Settings UI + Theming + Icon + Data Polish | Complete | Medium | 5, 6a-iv |
@@ -750,8 +802,8 @@ The prior coder's partial work left three active failures. Before fixing them:
 - `pnpm check:i18n` passes (no new `t('key')` calls in this sub-phase).
 
 **Acceptance criteria:**
-- [ ] `cargo test -p biscuitcode-providers` exits 0; output shows `test result: ok. 10 passed` (5 OpenAI + 5 Ollama wiremock tests).
-- [ ] `cargo test -p biscuitcode-agent` exits 0; output shows `test result: ok. 11 passed` (4 read_file + 7 search_code unit tests).
+- [ ] `cargo test -p biscuitcode-providers` exits 0 with zero failures. (Expected composition at time of writing: 5 OpenAI + 5 Ollama wiremock tests — do not assert the literal count, as new tests added before this phase runs will change it.)
+- [ ] `cargo test -p biscuitcode-agent` exits 0 with zero failures. (Expected composition at time of writing: 4 read_file + 7 search_code unit tests — do not assert the literal count.)
 - [ ] `pnpm check:types` exits 0 after `agentStore.ts` is created.
 - [ ] `import { useAgentStore, ToolCallCard } from '../state/agentStore'` resolves without TypeScript error in `AgentActivityPanel.tsx`.
 - [ ] Calling `useAgentStore.getState().addCard('t1', 'read_file')` followed by `useAgentStore.getState().cards[0].status` returns `'running'` in a Vitest unit test (`tests/unit/agentStore.spec.ts` — new file, minimum 5 tests covering addCard, updateCardArgs, completeCard, errorCard, clearCards).
@@ -812,7 +864,7 @@ The prior coder's partial work left three active failures. Before fixing them:
 
 ### Phase 6a-iii — Ollama Install Flow + Capability Files + E007 + E019
 
-**Goal:** Implement the `ollama_install` and `ollama_pull` Tauri commands with version gating and RAM-tier Gemma 4 selection; update the two capability files to unblock OpenAI and Ollama HTTP traffic; register `E007 GemmaVersionFallback` and `E019 OllamaDaemonDown` in all three layers (Rust enum, TypeScript union, `en.json` bundle).
+**Goal:** Implement the `ollama_check_and_install` and `ollama_pull` Tauri commands with version gating and RAM-tier Gemma 4 selection; update the two capability files to unblock OpenAI and Ollama HTTP traffic; register `E007 GemmaVersionFallback` and `E019 OllamaDaemonDown` in all three layers (Rust enum, TypeScript union, `en.json` bundle).
 
 **Deliverables:**
 - `src-tauri/src/commands/ollama.rs` (new file, or added to `lib.rs` per existing command layout):
@@ -821,19 +873,8 @@ The prior coder's partial work left three active failures. Before fixing them:
   - `ollama_select_model(ram_gb: u32)`: pure function returning the correct Gemma 4 tag for the given RAM. Logic: `< 8` → `"gemma4:e2b"`, `8-31` → `"gemma4:e4b"`, `32-47` → `"gemma4:26b"`, `>= 48` → `"gemma4:31b"`. (Accepts result of `sysinfo::System::total_memory() / 1024^3` cast to `u32`.)
   - `ollama_detect_ram()`: reads `sysinfo::System::total_memory()` and returns GB as `u32`.
   - All four commands registered in `invoke_handler`.
-- `src-tauri/capabilities/http.json` — add to the URL fetch allowlist:
-  - `"https://api.openai.com/**"`
-  - `"http://localhost:11434/**"`
-  (Copy verbatim from `docs/design/CAPABILITIES.md`.)
-- `src-tauri/capabilities/shell.json` — add `ollama` command entry with arg validators:
-  ```json
-  { "name": "ollama", "cmd": "ollama", "args": [
-      { "validator": "^(list|show|--version|serve)$" },
-      { "validator": "^pull$" },
-      { "validator": "^[a-z][a-z0-9._:-]*$" }
-  ]}
-  ```
-  Also add `ollama-install` entry for `sh -c "curl -fsSL https://ollama.com/install.sh | sh"` per `docs/design/CAPABILITIES.md`. (Exact JSON from CAPABILITIES.md — no paraphrase.)
+- `src-tauri/capabilities/http.json` — add OpenAI and Ollama URLs to the allowlist. **WARNING (Phase 5 Deviation #1):** Phase 5 Execution Notes record that `http:default` was reverted because `tauri-plugin-http` is not installed — all API calls go via Rust reqwest (no webview HTTP capability needed). Before modifying this file, inspect `src-tauri/capabilities/http.json` and Phase 5 Execution Notes. If all API calls remain via Rust reqwest, adding URLs here may be a no-op; document that finding in 6a-iii Execution Notes rather than silently adding lines that have no effect. If the capability IS needed (e.g., a future frontend `fetch` call), then add verbatim from `docs/design/CAPABILITIES.md` Phase 6a section.
+- `src-tauri/capabilities/shell.json` — add `ollama` command entry and `ollama-install` entry. **Copy the exact JSON verbatim from `docs/design/CAPABILITIES.md` Phase 6a section** — do NOT use the abbreviated snippet in earlier drafts of this plan (which merged `serve` into the first validator alternation; CAPABILITIES.md has it as a fourth separate validator object). The `ollama-install` entry for `sh -c "curl -fsSL https://ollama.com/install.sh | sh"` must also be copied verbatim from CAPABILITIES.md.
 - `src-tauri/biscuitcode-providers/src/types.rs` (or `errors.rs`): add `ProviderError::OllamaDaemonDown { endpoint: String }` if not already present (research confirms it already exists — verify, do not duplicate).
 - `src-tauri/biscuitcode-providers/src/ollama/mod.rs`: change `supports_tools` default in `list_models` from `is_gemma4 || is_qwen_coder || is_gemma3` to `true` for all models; add selective `false` only for known embedding/vision-only model name patterns (e.g., `nomic-embed-*`, `llava:*` without chat capability). Rationale: permissive default never incorrectly gates a user out of agent mode; conservative whitelist incorrectly marks `llama3.1:8b`, `phi4`, `qwen3` as unsupported. (Q1 decision — see Architecture Decisions.)
 - `docs/ERROR-CATALOGUE.md` — add `E019 OllamaDaemonDown`: recovery action "Start the Ollama daemon with `ollama serve`, or install Ollama via the Install button." (Q2 decision — see Architecture Decisions.)
@@ -859,7 +900,7 @@ The prior coder's partial work left three active failures. Before fixing them:
 - [ ] Manual smoke (WSL2, Ollama installed, version >= 0.20.0, 16 GB system): calling `invoke('ollama_check_and_install')` returns `OllamaStatus::Ready`; calling `invoke('ollama_select_model', { ram_gb: 16 })` returns `"gemma4:e4b"`.
 - [ ] Manual smoke (WSL2, Ollama NOT installed): calling `invoke('ollama_check_and_install')` shows `E019` toast with "Start it with: ollama serve" text and `status: 'NotInstalled'`.
 - [ ] `cat src-tauri/capabilities/http.json` contains both `"https://api.openai.com/**"` and `"http://localhost:11434/**"`.
-- [ ] `cat src-tauri/capabilities/shell.json` contains the `ollama` command entry with all three arg validators.
+- [ ] `cat src-tauri/capabilities/shell.json` contains the `ollama` command entry copied verbatim from `docs/design/CAPABILITIES.md` (four validator objects: list/show/--version, serve, pull, model-tag pattern).
 
 **Dependencies:** Phase 6a-ii (Tauri commands compile; `app_handle.emit` pattern established).
 **Complexity:** Medium.
@@ -881,7 +922,7 @@ The prior coder's partial work left three active failures. Before fixing them:
 - `tests/e2e/agent-mode-demo.spec.ts` — Playwright test sending the exact prompt `"List every file under src/ that contains the string TODO and summarize each TODO in one sentence"` to Anthropic (mocked via wiremock or a deterministic fixture), asserting: (1) `search_code` tool call with `query: "TODO"` and `glob: "src/**"` appears in `AgentActivityPanel`; (2) one `read_file` card per match; (3) final text message contains at least one summary sentence. (Ollama row marked `@skip` in CI — mandatory on the Gemma 4 smoke machine per Phase 10.)
 - `tests/provider-event-shape.spec.ts` — Playwright/Vitest snapshot test asserting the sequence `ToolCallStart → ToolCallDelta* → ToolCallEnd` is present for all three providers when run against the canonical-tool-prompt fixture. Anthropic and OpenAI use wiremock fixtures; Ollama fixture is a deterministic NDJSON blob.
 - `tests/e2e/agent-tool-card-render.spec.ts` — e2e test: for each of the 3 tool calls in the canonical fixture, `performance.measure('tool_card_render_<id>', 'tool_call_start_<id>', 'tool_card_visible_<id>').duration < 250`.
-- `src/components/ChatPanel.tsx` — `@`-mention picker: verify it is already present from the prior execution session or add it. The picker opens on `onChange` when the textarea value ends with `@`. `@file` fuzzy-searches via `invoke('fs_list_workspace_files', { query, limit: 10 })` wrapped in `try/catch` (empty list on failure). Selecting a file inserts `@file:<path>` token.
+- `src/components/ChatPanel.tsx` — `@`-mention picker: **assume absent and author it** (no evidence of prior implementation in research.md or prior execution notes; do not spend time searching — just add it). The picker opens on `onChange` when the textarea value ends with `@`. `@file` fuzzy-searches via `invoke('fs_list_workspace_files', { query, limit: 10 })` wrapped in `try/catch` (empty list on failure; do not propagate errors — the picker closes gracefully if the workspace command fails). Selecting a file inserts `@file:<path>` token.
 - `src/components/ChatPanel.tsx` — drag-file-into-chat: `onDrop` handler on the textarea inserts `@file:<path>` token for each dropped file from the workspace tree.
 - `tests/unit/agent-activity-panel.spec.tsx` — verify the 18-test suite (from execution notes) passes; if the file does not exist, create it covering: render gate (< 250ms), mention picker `onChange` trigger, drag-drop token, agent mode toggle, tool-card status transitions.
 - `pnpm test` (unit suite) exits 0.
