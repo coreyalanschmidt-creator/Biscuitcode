@@ -203,6 +203,9 @@ Each decision cites the research section. Decisions marked **(synthesis)** depar
 - **Reasoning-model TTFT exemption**. `gpt-5.4-pro` and other reasoning-only models emit no output until reasoning finishes (3–30 s). The p50-under-500ms TTFT gate applies only to non-reasoning models; reasoning runs show a `Thinking…` state. (r2 New Risks #2) **(synthesis: r2-source)**
 - **i18n scaffolding in Phase 2**: every user-facing string goes through `t('key')`; English-only bundle in v1. (r2 G1)
 - **a11y posture in v1**: keyboard-only navigation, ARIA labels on icon buttons, `aria-live="polite"` on streaming chat, focus rings. Full WCAG AA is post-v1. (r2 G2)
+- **[6a-Q1] `supports_tools` defaults permissive (`true`) in `OllamaProvider::list_models`.** Selective `false` only for known embedding/vision-only model name patterns (e.g., `nomic-embed-*`). Rationale: a conservative whitelist incorrectly grays out the agent toggle for `llama3.1:8b`, `phi4`, `qwen3`, and any future capable model not yet on the list. A user whose model is falsely gated loses functionality with no visible explanation. A user whose model is false-positively enabled gets a graceful `ToolError` if the model ignores tool calls. Permissive default is the correct trade-off. (research.md §12 Risk 2, §12 Q1)
+- **[6a-Q2] `E019 OllamaDaemonDown` is a new error code**, distinct from `E005 NetworkError`. Recovery action is "Start the Ollama daemon with `ollama serve`, or install Ollama via the Install button." This is a distinct user action from a generic network failure, warranting a distinct code and message. (research.md §12 Q2)
+- **[6a-Q3] Tauri event emission uses a single `"agent:event"` event name** carrying a serde-tagged `ChatEvent` payload. The frontend dispatches on `payload.type`. Per-variant event names (e.g., `"agent:tool_call_start"`) are rejected — they would require `N` separate `listen()` calls and cannot share a single unsubscribe handle. (research.md §12 Q3)
 
 ---
 
@@ -216,14 +219,17 @@ Each decision cites the research section. Decisions marked **(synthesis)** depar
 | 3 | Editor + File Tree + Find/Replace | Complete | Medium | 2 |
 | 4 | Terminal (xterm.js + portable-pty) | Complete | Medium | 2 |
 | 5 | Keyring + Anthropic Provider + Chat Panel (virtualized E2E) | Complete | Medium | 2 |
-| 6a | OpenAI + Ollama Providers + Read-Only Tool Surface + Agent Activity UI | Complete | Medium | 5 |
-| 6b | Write Tools + Inline Edit (split-diff) + Rewind | Complete | High | 3, 6a |
+| 6a-i | Foundation verification + `agentStore.ts` | Not Started | Low | 5 |
+| 6a-ii | Tauri command wiring + ChatEvent event bridge | Not Started | Medium | 6a-i |
+| 6a-iii | Ollama install flow + capability files + E007 + E019 | Not Started | Medium | 6a-ii |
+| 6a-iv | Cross-provider acceptance tests + `supports_tools` fix | Not Started | Medium | 6a-iii |
+| 6b | Write Tools + Inline Edit (split-diff) + Rewind | Complete | High | 3, 6a-iv |
 | 7 | Git Panel + LSP Client + Preview Panel | Complete | High | 3 |
-| 8 | Onboarding + Settings UI + Theming + Icon + Data Polish | Complete | Medium | 5, 6a |
+| 8 | Onboarding + Settings UI + Theming + Icon + Data Polish | Complete | Medium | 5, 6a-iv |
 | 9 | a11y Audit + Error Catalogue Consolidation + Auto-Update Wiring | Not Started | Low | 7, 8 |
 | 10 | Packaging + CI + GPG Signing + Release Smoke Test | Not Started | Medium | 9 |
 
-Total: **12 phases** (0 through 10, with Phase 6 split 6a/6b). Estimated calendar: Phase 0 half day; Phases 1/2/4/5/9/10 ≈ 1 day each; Phases 3/6a/8 ≈ 2 days each; Phase 6b ≈ 2 days; Phase 7 ≈ 3 days. **Total ≈ 16 focused working days** — between r1's 15 and r2's 17.
+Total: **15 phases** (0 through 10, with Phase 6 split into 6a-i/6a-ii/6a-iii/6a-iv + 6b). Estimated calendar: Phase 0 half day; Phases 1/2/4/5/9/10 ≈ 1 day each; Phase 3/8 ≈ 2 days each; Phases 6a-i/6a-ii/6a-iii/6a-iv ≈ 0.5–1 day each (≈ 3 days total for the 6a sprint); Phase 6b ≈ 2 days; Phase 7 ≈ 3 days. **Total ≈ 17 focused working days.**
 
 ---
 
@@ -729,155 +735,182 @@ The prior coder's partial work left three active failures. Before fixing them:
 
 ---
 
-### Phase 6a — OpenAI + Ollama Providers + Read-Only Tool Surface + Agent Activity UI
+### Phase 6a-i — Foundation Verification + `agentStore.ts`
 
-**Goal:** Ship the remaining two providers behind the same `ModelProvider` trait, ship the read-only half of the agent tool surface (`read_file`, `search_code`), and render the Agent Activity panel with live-streaming tool-call cards. Ollama detection + install + Gemma 4 auto-pull included. End state: user can ask "find all TODO comments and summarize them" with any of three providers and watch the agent work.
+**Goal:** Confirm the pre-authored provider, agent, and panel code compiles clean and unit tests pass; create the missing `src/state/agentStore.ts` Zustand slice that `AgentActivityPanel.tsx` imports.
 
 **Deliverables:**
-- **Create workspace crate `biscuitcode-agent` here** (read-only tools subset only; write tools land in 6b).
-- `biscuitcode-providers::openai::OpenAIProvider`:
-  - SSE parsing of Chat Completions deltas.
-  - Per-index `tool_calls` argument accumulation until `finish_reason === "tool_calls"`, then emit `ToolCallStart + ToolCallDelta* + ToolCallEnd` into the same `ChatEvent` stream.
-  - **Default `gpt-5.4-mini`.** Picker exposes `gpt-5.4`, `gpt-5.4-pro` (reasoning), `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.3 Instant`. Legacy `gpt-5.2 Thinking` shown but tagged legacy until 2026-06-05.
-  - `reasoning.effort` surfaced as an optional per-conversation setting.
-  - Reasoning models exempt from the TTFT gate; UI shows `Thinking…` state.
-- `biscuitcode-providers::ollama::OllamaProvider`:
-  - NDJSON parsing of `/api/chat` (line-delimited JSON, one object per line).
-  - `tools` passthrough in OpenAI-function-call format; extract `message.tool_calls` from the final non-done chunk. **Robust XML-tag fallback:** if tool_calls is empty but `message.content` contains a `<tool_call>...</tool_call>` block (common with Gemma 3 base / community fine-tunes), regex-extract and emit it as a `ToolCallStart/End` pair.
-  - Model picker pulls from `GET /api/tags` (local models).
-  - **Primary default ladder = Gemma 4 by RAM (verified tags as of 2026-04-18):**
-    | RAM | Primary default | Why this tier | Agent-mode alternative | Fallback if Gemma 4 unavailable |
-    |---|---|---|---|---|
-    | < 8 GB | `gemma4:e2b` | 7.2GB file; smallest viable | `gemma4:e2b` | `gemma3:1b` |
-    | 8–16 GB | `gemma4:e4b` | 9.6GB file; `:latest` alias | `gemma4:e4b` | `gemma3:4b` |
-    | 16–32 GB | `gemma4:e4b` | leaves headroom for editor + browser | `qwen2.5-coder:7b` (preferred for code-heavy agent mode) | `gemma3:4b` + `qwen2.5-coder:7b` |
-    | 32–48 GB | `gemma4:26b` | MoE: 25.2B total / **3.8B active** = highly RAM-efficient at runtime | `qwen2.5-coder:32b` | `gemma3:12b` + `qwen2.5-coder:7b` |
-    | ≥ 48 GB | `gemma4:31b` | 30.7B dense; best quality if RAM allows | `qwen2.5-coder:32b` | `gemma3:27b` |
-
-    **Tag verification:** `gemma4:e2b`, `gemma4:e4b`, `gemma4:26b`, `gemma4:31b` confirmed against `https://ollama.com/library/gemma4` on 2026-04-18. `gemma4:e4b` is also published as `gemma4:latest`. `gemma4:31b-cloud` exists for cloud-hosted use; not appropriate for our local-default story.
-
-    **All Gemma 4 variants support native function calling** (per Google's release notes, verified by Ollama's NDJSON `/api/chat` endpoint emitting structured `message.tool_calls`). The XML-tag fallback below is therefore needed only for Gemma 3 community fine-tunes — kept in the code path as defensive parsing.
-
-    **Selection logic at first run:** ping `GET /api/tags` to list local models. If any `gemma4:*` is present, use it as the primary default per the table above. If not, attempt `ollama pull` of the appropriate Gemma 4 tier; if that pull fails (e.g., Ollama version < 0.20.0 doesn't recognize the tag), fall back to the Gemma 3 ladder shown in the rightmost column and surface a one-time toast `Gemma 4 unavailable on your Ollama version (need >= 0.20.0); using Gemma 3 fallback. Run 'curl -fsSL https://ollama.com/install.sh | sh' to upgrade.` (catalogue code `E007 GemmaVersionFallback`).
-  - `ollama_install()`: detects absence via `curl -sSfm 1 http://localhost:11434/api/version` and `which ollama`. On missing, shows confirm dialog with verbatim command `curl -fsSL https://ollama.com/install.sh | sh` and runs via `plugin-shell` *only after* user confirms.
-  - `ollama_pull(model)`: progress events piped from `ollama pull` stdout to a progress bar.
-  - RAM detection via `sysinfo` crate.
-- `http.json` capability: add `http://localhost:11434/**` and `https://api.openai.com/**` to fetch allowlist.
-- `shell.json` capability: add `ollama` to command registry, argument regex limited to `pull <model>`, `list`, `show <model>`, `serve`, `--version`.
-- Per-conversation model switch: chat panel model dropdown is conversation-scoped, persisted to `conversations.active_model`.
-- All three provider status badges go live (green/yellow/red).
-- **Read-only tool surface in `biscuitcode-agent::tools`:**
-  - `read_file(path)` — workspace-scope-validated, returns file contents up to 256KB.
-  - `search_code(query, glob?, regex?)` — wraps the Phase 3 `ignore`+`grep` backend, returns matches with line numbers.
-- `biscuitcode-agent::executor` — ReAct loop, READ-ONLY mode this phase:
-  - Accepts a conversation; streams from selected provider.
-  - On `ToolCallEnd`, decodes args, executes the read-only tool (no confirmation needed for reads), appends `ToolResult`, continues looping until `Done` with no further tool calls.
-  - Pause flag checked at loop boundaries (single atomic bool).
-  - **Worst-case pause latency: 5 seconds** when no tool is currently running.
-  - Write/shell tools registered as `not_yet_available` errors so the model gets a clear signal that those land in 6b.
-- **`AgentActivityPanel.tsx`** rendering tool calls as collapsible cards (running/ok/error status, timing, pretty-JSON args, streamed result). Uses `react-virtuoso` for virtualization (shared abstraction from Phase 5). Badge on chat message links to the card.
-- **Agent mode toggle** in chat panel (default off). When off, loop stops after first assistant message; when on, auto-continues on tool calls.
-- **Tool-card render trace instrumentation:** on every `ToolCallStart` event the executor emits `performance.mark('tool_call_start_<id>')`; when the Agent Activity card first paints, a MutationObserver emits `performance.mark('tool_card_visible_<id>')`. Persisted in debug log for the gate in Phase 9.
-- **Chat context mentions — editor-local subset:** typing `@` in chat input opens picker for `@file` (fuzzy over workspace tree), `@folder`, `@selection` (current editor selection). Each resolves to a structured context block in the user message. Non-editor mentions land in Phase 7.
-- **Drag-file-into-chat:** dropping a file from the file tree onto the chat input inserts an `@file:<path>` token.
+- Run `cargo test -p biscuitcode-providers` and `cargo test -p biscuitcode-agent` from WSL2 — both pass with zero failures.
+- Run `pnpm check:types` — TypeScript build is clean (except the known `'../state/agentStore'` import error in `AgentActivityPanel.tsx`, which this sub-phase fixes).
+- `src/state/agentStore.ts` — new Zustand slice (`create<AgentStore>(...)`) exporting:
+  - `ToolCallCard` interface: `{ id: string; name: string; status: 'running' | 'ok' | 'error'; argsJson: string; result: string | null; startedAt: number; endedAt: number | null }`.
+  - `AgentStore` interface with `cards: ToolCallCard[]` and actions: `addCard(id, name)`, `updateCardArgs(id, delta)`, `completeCard(id, result)`, `errorCard(id, error)`, `clearCards()`.
+  - `addCard` sets `status: 'running'`, `argsJson: ''`, `startedAt: performance.now()`, `endedAt: null`.
+- `pnpm check:types` passes clean after `agentStore.ts` is created.
+- `pnpm check:i18n` passes (no new `t('key')` calls in this sub-phase).
 
 **Acceptance criteria:**
-- [ ] With an OpenAI key set, sending a message using `gpt-5.4-mini` streams text; tool call for `search_code("TODO")` returns valid JSON args and completes.
-- [ ] Switching the same conversation to `claude-opus-4-7` mid-thread preserves prior messages; Claude sees the OpenAI tool result as input.
-- [ ] On a VM without Ollama, clicking "Install Ollama" shows the confirm dialog with the full `curl | sh` command before executing; declining does nothing.
-- [ ] **After Ollama install on a 16 GB system: the picker shows `gemma4:e4b` selected by default; `ollama list` confirms `gemma4:e4b` was pulled (9.6 GB).** On systems whose Ollama version (< 0.20.0) does not recognize Gemma 4 tags, the picker shows a Gemma 3 default with the `E007 GemmaVersionFallback` toast and the upgrade-Ollama install command.
-- [ ] **RAM-tier selection verified against the table in deliverables:** 4 GB system → `gemma4:e2b` (or `gemma3:1b` fallback); 12 GB → `gemma4:e4b`; 32 GB → `gemma4:26b`; 64 GB → `gemma4:31b`. Each tier verified by spinning up a constrained-RAM VM and confirming the picker's default + the `ollama pull` command issued.
-- [ ] **Native tool calling on Gemma 4:** sending an "agent mode on" prompt with a registered `read_file` tool to `gemma4:e4b` returns a structured `message.tool_calls` array in the NDJSON stream — NOT a `<tool_call>` XML block in `message.content`. (XML-tag fallback path is exercised separately by the Gemma 3 fallback test below.)
-- [ ] **Concrete agent-mode demo:** with agent mode ON, sending the exact prompt `"List every file under src/ that contains the string TODO and summarize each TODO in one sentence"` to Anthropic produces (in order) (1) a `search_code` tool call with `query: "TODO"` and `glob: "src/**"`, (2) a `read_file` call for each match, (3) a final assistant text message containing one summary line per file. Repeating the same prompt against Ollama with a Gemma 4 model produces the same tool call sequence (timing may differ). Verified by `tests/e2e/agent-mode-demo.spec.ts`.
-- [ ] **Cross-provider snapshot:** a single `ChatEvent` stream produced by an equivalent "hello" prompt has identical event shape across all three providers (snapshot test `tests/provider-event-shape.spec.ts`).
-- [ ] **Agent pause:** pressing Pause during a long agent run stops before the next tool call AND **within 5 seconds** if no tool is currently running.
-- [ ] **Read-only safety:** the model attempting to call `write_file` receives a clear error indicating "tool not available in this build (lands in 6b)" rather than a tool-not-found 500.
-- [ ] Typing `@` in chat opens the mention picker; `@file` then a filename inserts the structured token; the backend sees the file content in the request payload.
-- [ ] Dropping a file from the tree onto chat input inserts the same `@file:<path>` token as the picker.
-- [ ] **Tool-card render latency gate**: for the canonical 3-tool prompt at `tests/fixtures/canonical-tool-prompt.md`, every `tool_card_visible_<id> - tool_call_start_<id>` measure is under `250ms` — e2e test `tests/e2e/agent-tool-card-render.spec.ts`.
-- [ ] On a Gemma 3 fallback that emits `<tool_call>` XML in `message.content`, the Ollama provider extracts and emits a `ToolCallStart/End` pair correctly (regex-tested).
+- [ ] `cargo test -p biscuitcode-providers` exits 0; output shows `test result: ok. 10 passed` (5 OpenAI + 5 Ollama wiremock tests).
+- [ ] `cargo test -p biscuitcode-agent` exits 0; output shows `test result: ok. 11 passed` (4 read_file + 7 search_code unit tests).
+- [ ] `pnpm check:types` exits 0 after `agentStore.ts` is created.
+- [ ] `import { useAgentStore, ToolCallCard } from '../state/agentStore'` resolves without TypeScript error in `AgentActivityPanel.tsx`.
+- [ ] Calling `useAgentStore.getState().addCard('t1', 'read_file')` followed by `useAgentStore.getState().cards[0].status` returns `'running'` in a Vitest unit test (`tests/unit/agentStore.spec.ts` — new file, minimum 5 tests covering addCard, updateCardArgs, completeCard, errorCard, clearCards).
 
-**Dependencies:** Phase 5 (trait, chat panel, keyring, conversation persistence).
-**Complexity:** Medium.
-**Split rationale:** Bundling all three providers WITH the read-only agent surface means the `ChatEvent` contract gets validated against three real providers before any write tool depends on it. Provider quirks surface here (Anthropic content-blocks, OpenAI indexed deltas, Ollama NDJSON + XML fallback) where the loop can be debugged in isolation from the riskier write/rewind work. The Agent Activity UI is here because every provider emits `ToolCallStart/End` events the panel needs to render, and the read-only tool surface gives the panel real data to display.
-**Status:** Complete
+**Dependencies:** Phase 5 (trait, providers skeleton, agent skeleton, AgentActivityPanel.tsx pre-staged).
+**Complexity:** Low.
+**Status:** Not Started.
+
+**Split rationale:** The TypeScript build fails on the `agentStore` import before any Tauri wiring can be tested. Fixing this gap is the prerequisite for every other sub-phase. Keeping it separate from Tauri wiring (6a-ii) ensures the coder has a clean green build as the baseline for the more complex integration work that follows.
 
 #### Pre-Mortem
 
-[PM-01] `openai/mod.rs::chat_stream` | tool-call accumulator loses the tool `name` on subsequent `tool_calls[i]` deltas | OpenAI sends `function.name` only in the FIRST delta chunk for each index; subsequent chunks carry only `function.arguments` fragments. If the accumulator map is keyed by id (not by index) and the id arrives only once, a late-arriving chunk with no `id` field will fail to match, producing a `ToolCallEnd` with empty `name`.
+#### Execution Notes
 
-[PM-02] `ollama/mod.rs::chat_stream` | line-buffering of NDJSON across reqwest chunk boundaries | `reqwest` yields byte chunks that do not align to newline boundaries. If a JSON object spans two chunks the naive `serde_json::from_str` on each chunk fails, silently dropping the partial line or emitting a parse error. The stream must carry an internal line-accumulation buffer.
+---
 
-[PM-03] `agent/tools/search_code.rs::execute` | `ignore::WalkBuilder` panics or produces wrong results when `args.glob` contains `{a,b}` brace expansion | The `globset` crate supports brace expansion but only if the pattern is compiled with `GlobSetBuilder` using `Glob::new` — not the `ignore` crate's built-in glob filter. If the path is set via `WalkBuilder::add_custom_ignore_filename` instead of a globset matcher, brace patterns silently fail to match or panic.
+### Phase 6a-ii — Tauri Command Wiring + ChatEvent Event Bridge
+
+**Goal:** Wire `agent_run` and `agent_pause` Tauri commands in `src-tauri/src/lib.rs`, manage `ToolRegistry` and `AtomicBool` as Tauri state, and forward `ChatEvent` stream variants to the frontend via a single `"agent:event"` Tauri event so `agentStore` can process them.
+
+**Deliverables:**
+- Inspect `src-tauri/src/lib.rs` (Phase 5 precedent): find the existing `ChatEvent` emission pattern used by `chat_send` and replicate its serialization + event-name approach in `agent_run`. Document the Phase 5 pattern in Execution Notes before writing any new code.
+- `src-tauri/src/lib.rs` (or `src-tauri/src/commands/agent.rs` — follow the project's existing command module layout):
+  - `agent_run` async command: accepts `conversation_id: String`, `model_id: String`, `agent_mode: bool`. Constructs `ReActExecutor` with `ToolRegistry::read_only_default()`. Drives the executor's `run()` loop. On each `ChatEvent` from the stream, calls `app_handle.emit("agent:event", &event)`. Returns `RunOutcome` (or `String` error) when done.
+  - `agent_pause` sync command: calls `pause_flag.store(true, Ordering::SeqCst)` on the `Arc<AtomicBool>` managed state.
+- `app.manage(Arc::new(ToolRegistry::read_only_default()))` and `app.manage(Arc::new(AtomicBool::new(false)))` added to the Tauri builder in `lib.rs`.
+- Both commands registered in `.invoke_handler(tauri::generate_handler![..., agent_run, agent_pause])`.
+- Frontend: `src/components/ChatPanel.tsx` — adds `listen("agent:event", handler)` subscription that dispatches `ChatEvent` variants to the correct `agentStore` actions:
+  - `{ type: "ToolCallStart", id, name }` → `agentStore.addCard(id, name)`; `performance.mark('tool_call_start_<id>')`.
+  - `{ type: "ToolCallDelta", id, args_delta }` → `agentStore.updateCardArgs(id, args_delta)`.
+  - `{ type: "ToolCallEnd", id, args_json }` → (no store action yet; tool is still executing).
+  - `{ type: "ToolResult", id, result }` → `agentStore.completeCard(id, result)`.
+  - `{ type: "ToolError", id, error }` → `agentStore.errorCard(id, error)`.
+  - `{ type: "TextDelta", text }` → existing chat message append path.
+  - `{ type: "Done" }` → unlatch loading state.
+- `src/locales/en.json` — add `agent.runningLabel`, `agent.pauseLabel`, `agent.doneLabel` keys (minimum; follow i18n pattern from Phase 2).
+- `pnpm check:i18n` exits 0 after key additions.
+- `cargo build` (not `tauri build`) exits 0 with the new commands registered.
+
+**Acceptance criteria:**
+- [ ] `cargo build -p biscuitcode` (the main Tauri crate) exits 0.
+- [ ] `pnpm check:types` exits 0.
+- [ ] `pnpm check:i18n` exits 0.
+- [ ] Unit test `tests/unit/agent-event-bridge.spec.ts` (new, minimum 3 tests): mocking `listen("agent:event", ...)`, dispatching a `ToolCallStart` payload calls `agentStore.addCard` with the correct id and name; dispatching `ToolResult` calls `agentStore.completeCard`; dispatching `Done` unlatches the loading state.
+- [ ] In a manual smoke test from WSL2 (`pnpm tauri dev`): sending a prompt with agent mode ON (with a valid Anthropic key) triggers a `search_code` tool card appearing in `AgentActivityPanel` with `status: 'running'`, then `status: 'ok'` when the tool returns. (This verifies the full event chain works end-to-end for the Anthropic provider, which is already wired from Phase 5.)
+
+**Dependencies:** Phase 6a-i (agentStore exists and types pass); Phase 5 (chat_send precedent in lib.rs, conversation persistence).
+**Complexity:** Medium.
+**Status:** Not Started.
+
+**Split rationale:** Tauri wiring touches `lib.rs` (Rust) and `ChatPanel.tsx` (TypeScript) simultaneously. It is the integration seam between the Rust backend and the React frontend. Merging it with 6a-i would force the coder to fix the TypeScript build AND reason about Rust state management in a single session. Merging it with 6a-iii would couple Ollama-specific wiring (install flow, capability files) with the generic event bridge, making partial failures harder to diagnose. This is the correct boundary: a clean green build in, a fully wired event pipeline out.
+
+#### Pre-Mortem
 
 #### Execution Notes
 
-**Files changed:**
-- `src-tauri/biscuitcode-providers/src/openai/mod.rs` — full SSE streaming implementation replacing the stub
-- `src-tauri/biscuitcode-providers/src/ollama/mod.rs` — full NDJSON streaming + list_models + XML-tag fallback replacing the stub
-- `src-tauri/biscuitcode-providers/Cargo.toml` — added `regex = "1"` dependency for Ollama XML fallback
-- `src-tauri/biscuitcode-agent/src/tools/search_code.rs` — full search implementation replacing stub
-- `src-tauri/biscuitcode-agent/src/tools/read_file.rs` — added unit tests (implementation was already complete from Phase 5 skeleton)
-- `src-tauri/biscuitcode-agent/Cargo.toml` — added `regex = "1"` and `tempfile = "3"` (dev-dep)
+---
 
-**Approach:** Implemented OpenAI SSE streaming with an index-keyed `HashMap<usize, ToolCallAccum>` to prevent PM-01 (name lost on later deltas). Implemented Ollama NDJSON with an explicit `line_buf: String` line-accumulator (PM-02 prevention) and a compiled `Regex` for XML-tag fallback. Implemented `search_code` using `globset::GlobSetBuilder` for user-supplied glob patterns (PM-03 prevention) and `ignore::WalkBuilder` for `.gitignore`-respecting traversal. Added `wiremock`-based integration tests for both providers and `tempfile`-based unit tests for both tools.
+### Phase 6a-iii — Ollama Install Flow + Capability Files + E007 + E019
 
-**Pre-Mortem reconciliation:**
-[PM-01] AVOIDED | `openai/mod.rs::chat_stream` | tool-call accumulator name loss | Accumulator keyed by `usize` index from `tool_calls[i].index`; `ToolCallStart` emitted only once when `entry.name` is first populated; test `sse_two_tool_calls_index_accumulation` asserts both names are populated
-[PM-02] AVOIDED | `ollama/mod.rs::chat_stream` | cross-chunk NDJSON line splits | `line_buf` accumulates raw bytes across chunks; only dispatches JSON when a `\n` is found; test `ndjson_line_split_across_chunks` validates correct parse
-[PM-03] AVOIDED | `agent/tools/search_code.rs::execute` | brace-expansion glob failures | Used `globset::Glob::new` + `GlobSetBuilder` instead of `ignore`'s built-in filter; test `glob_brace_expansion_matches_both_dirs` validates `{src,tests}/**/*.ts`
-[UNPREDICTED] NONE | - | - | -
+**Goal:** Implement the `ollama_install` and `ollama_pull` Tauri commands with version gating and RAM-tier Gemma 4 selection; update the two capability files to unblock OpenAI and Ollama HTTP traffic; register `E007 GemmaVersionFallback` and `E019 OllamaDaemonDown` in all three layers (Rust enum, TypeScript union, `en.json` bundle).
 
-**Deviations:**
-- Phase 6a plan listed many frontend deliverables (AgentActivityPanel.tsx, agent mode toggle, @-mention picker, drag-file-into-chat, tool-card render trace instrumentation). These are frontend React components. The phase's Rust backend deliverables (providers + agent tools + executor) are complete and tested. The frontend work is not yet implemented — marking scope as **backend-complete**. The plan section covers both Rust backend and frontend UI work; the Rust backend (provider impls, agent tool surface, executor logic) is the verifiable, testable output for this session.
-- `OpenAIProvider::with_base_url` added (test seam); not present in stub but consistent with `OllamaProvider::with_base_url` pattern established in Phase 5 skeleton.
+**Deliverables:**
+- `src-tauri/src/commands/ollama.rs` (new file, or added to `lib.rs` per existing command layout):
+  - `ollama_check_and_install(app_handle)`: calls `GET http://localhost:11434/api/version`. If connection refused → emit `E019` and return `OllamaStatus::NotInstalled`. If version < `0.20.0` → emit `E007` (version-too-old path). If version >= `0.20.0` → return `OllamaStatus::Ready { version }`.
+  - `ollama_pull(model: String, app_handle)`: invokes `ollama pull <model>` via `tauri-plugin-shell`, streams stdout progress to frontend via `app_handle.emit("ollama:pull-progress", line)`. Returns on exit code 0; returns error string on non-zero.
+  - `ollama_select_model(ram_gb: u32)`: pure function returning the correct Gemma 4 tag for the given RAM. Logic: `< 8` → `"gemma4:e2b"`, `8-31` → `"gemma4:e4b"`, `32-47` → `"gemma4:26b"`, `>= 48` → `"gemma4:31b"`. (Accepts result of `sysinfo::System::total_memory() / 1024^3` cast to `u32`.)
+  - `ollama_detect_ram()`: reads `sysinfo::System::total_memory()` and returns GB as `u32`.
+  - All four commands registered in `invoke_handler`.
+- `src-tauri/capabilities/http.json` — add to the URL fetch allowlist:
+  - `"https://api.openai.com/**"`
+  - `"http://localhost:11434/**"`
+  (Copy verbatim from `docs/design/CAPABILITIES.md`.)
+- `src-tauri/capabilities/shell.json` — add `ollama` command entry with arg validators:
+  ```json
+  { "name": "ollama", "cmd": "ollama", "args": [
+      { "validator": "^(list|show|--version|serve)$" },
+      { "validator": "^pull$" },
+      { "validator": "^[a-z][a-z0-9._:-]*$" }
+  ]}
+  ```
+  Also add `ollama-install` entry for `sh -c "curl -fsSL https://ollama.com/install.sh | sh"` per `docs/design/CAPABILITIES.md`. (Exact JSON from CAPABILITIES.md — no paraphrase.)
+- `src-tauri/biscuitcode-providers/src/types.rs` (or `errors.rs`): add `ProviderError::OllamaDaemonDown { endpoint: String }` if not already present (research confirms it already exists — verify, do not duplicate).
+- `src-tauri/biscuitcode-providers/src/ollama/mod.rs`: change `supports_tools` default in `list_models` from `is_gemma4 || is_qwen_coder || is_gemma3` to `true` for all models; add selective `false` only for known embedding/vision-only model name patterns (e.g., `nomic-embed-*`, `llava:*` without chat capability). Rationale: permissive default never incorrectly gates a user out of agent mode; conservative whitelist incorrectly marks `llama3.1:8b`, `phi4`, `qwen3` as unsupported. (Q1 decision — see Architecture Decisions.)
+- `docs/ERROR-CATALOGUE.md` — add `E019 OllamaDaemonDown`: recovery action "Start the Ollama daemon with `ollama serve`, or install Ollama via the Install button." (Q2 decision — see Architecture Decisions.)
+- `src-tauri` error enum: add `BiscuitError::OllamaDaemonDown` variant with `#[error("E019")]` and map from `ProviderError::OllamaDaemonDown`.
+- `src/types/errors.ts` — add `'E019'` to the `BiscuitErrorCode` union.
+- `src/locales/en.json` — add:
+  - `"errors.E007": "Gemma 4 unavailable: Ollama {version} is below 0.20.0. Using Gemma 3 fallback. Upgrade with: curl -fsSL https://ollama.com/install.sh | sh"`
+  - `"errors.E019": "Ollama daemon is not running. Start it with: ollama serve"`
+- Unit test `cargo test -p biscuitcode-providers ollama::tests::supports_tools_default_is_true`: asserts a model not in the known whitelist (e.g., `llama3.1:8b`) has `supports_tools: true` in the `list_models` response.
+- Unit test `cargo test -p biscuitcode-providers ollama::tests::version_gate_blocks_old_daemon`: wiremock server returning `{"version": "0.19.5"}` from `/api/version` causes `ollama_check_and_install` to return the `E007` path (Gemma 3 fallback, not Gemma 4 pull).
+- Unit test `cargo test -p biscuitcode-providers ollama::tests::daemon_down_returns_e019`: connection refused on port 11434 causes `ollama_check_and_install` to emit `E019`.
+- `pnpm check:i18n` exits 0.
+- `pnpm check:types` exits 0.
+- `cargo build` exits 0 with new capability files in place.
 
-**New findings:**
-- The `is_inside_workspace` canonicalize-based check in `ToolCtx` returns false for non-existent paths (canonicalize fails). This means `read_file("nonexistent.txt")` returns `OutsideWorkspace` not `Io`. This is conservative-safe but may confuse models that see workspace-escape errors for typo'd paths. Phase 6b or a follow-up should consider a separate "file not found" error variant. Noted in Follow-ups.
-- `encode_message` in Ollama for `Role::Tool` only encodes the first `tool_result`. The executor appends one result per call so this is fine in practice, but a multi-result tool message would silently drop the others. Phase 6b should add a guard or assert.
+**Acceptance criteria:**
+- [ ] `cargo test -p biscuitcode-providers ollama::tests::supports_tools_default_is_true` passes.
+- [ ] `cargo test -p biscuitcode-providers ollama::tests::version_gate_blocks_old_daemon` passes.
+- [ ] `cargo test -p biscuitcode-providers ollama::tests::daemon_down_returns_e019` passes.
+- [ ] `cargo build` exits 0.
+- [ ] `pnpm check:types` exits 0.
+- [ ] `pnpm check:i18n` exits 0.
+- [ ] Manual smoke (WSL2, Ollama installed, version >= 0.20.0, 16 GB system): calling `invoke('ollama_check_and_install')` returns `OllamaStatus::Ready`; calling `invoke('ollama_select_model', { ram_gb: 16 })` returns `"gemma4:e4b"`.
+- [ ] Manual smoke (WSL2, Ollama NOT installed): calling `invoke('ollama_check_and_install')` shows `E019` toast with "Start it with: ollama serve" text and `status: 'NotInstalled'`.
+- [ ] `cat src-tauri/capabilities/http.json` contains both `"https://api.openai.com/**"` and `"http://localhost:11434/**"`.
+- [ ] `cat src-tauri/capabilities/shell.json` contains the `ollama` command entry with all three arg validators.
 
-**Follow-ups (Law 3 — observed but untouched):**
-- `ToolError::OutsideWorkspace` fires for non-existent files due to canonicalize semantics. A `FileNotFound` variant would give cleaner model feedback.
-- `encode_message` for Ollama/OpenAI `Role::Tool` only encodes `tool_results.first()`. Add assert or iterate if multi-result is ever needed.
+**Dependencies:** Phase 6a-ii (Tauri commands compile; `app_handle.emit` pattern established).
+**Complexity:** Medium.
+**Status:** Not Started.
 
-**Frontend half (this session):**
+**Split rationale:** Capability files and error-code registration are orthogonal to the event bridge but must be in place before the acceptance-test run (6a-iv) can make HTTP calls to OpenAI or execute `ollama pull`. The `supports_tools` fix is here because it is an Ollama-provider change that the acceptance tests will exercise. Merging this with 6a-ii would risk capability-file changes breaking the Tauri build mid-session while the coder is debugging event dispatch. The boundary is: capability files + Ollama-specific Tauri commands in, acceptance tests out.
 
-**Files changed (frontend):**
-- `src/state/agentStore.ts` — new Zustand store: `ToolCallCard[]`, `agentMode`, `conversationId`, `startCard/appendArgsDelta/endCard/clearCards` actions
-- `src/components/AgentActivityPanel.tsx` — rewritten: react-virtuoso list of ToolCards, `performance.mark('tool_card_visible_<id>')` in `useEffect`, collapsible cards with status icon / timing / args / result
-- `src/components/ChatPanel.tsx` — added agent mode toggle, `@`-mention picker (triggered in `onChange` not `onKeyDown`), drag-and-drop file token insertion, `tool_call_start/delta/end` event dispatch into agentStore, `performance.mark('tool_call_start_<id>')` on start events, `chat_send` passes `agent_mode` field
-- `src/locales/en.json` — added `chat.agentMode`, `chat.agentModeLabel`, `chat.agentModeTitle`, `chat.mentionPickerLabel`, `chat.mentionNoResults`, `agent.*` section
-- `tests/unit/agent-activity-panel.spec.tsx` — new: 18 tests covering render gate (performance.mark + measure < 250ms), mention picker onChange trigger, drag-drop token, agent mode toggle, tool-card event dispatch
+#### Pre-Mortem
 
-**Approach (frontend):** Introduced a shared `agentStore` (Zustand) so AgentActivityPanel can read tool-call cards without needing the `conversationId` that only ChatPanel owns (addresses PM-06). The `@`-mention picker is triggered in `onChange` from the updated textarea value — not in `onKeyDown` before the value update — so the trigger works for pasted `@` as well (addresses PM-05). `performance.mark` for the render gate is placed in `useEffect` (synchronous after React commit) rather than a MutationObserver (addresses PM-04). `react-virtuoso` is mocked in jsdom tests with a simple pass-through renderer so items are visible to query selectors.
+#### Execution Notes
 
-**Pre-Mortem reconciliation (frontend):**
-[PM-04] AVOIDED | `AgentActivityPanel.tsx::useEffect` | async MutationObserver batching | Used `useEffect` (synchronous post-commit) instead of MutationObserver; mark fires before browser paint; render-gate test `tool_card_render_call_003` confirms measure < 250ms
-[PM-05] AVOIDED | `ChatPanel.tsx::handleInputChange` | onKeyDown fires before value update | Picker triggered in `onChange` which receives the updated value; test `opens when the textarea value ends with "@"` confirms the picker opens
-[PM-06] AVOIDED | `AgentActivityPanel.tsx` | no access to conversationId | Introduced `src/state/agentStore.ts`; ChatPanel syncs its `conversationId` to the store; AgentActivityPanel reads `cards` from the store with no direct event subscription needed
-[UNPREDICTED] | `react-virtuoso` | jsdom renders no items (requires DOM layout) | Mocked with a pass-through `div` renderer in the test file; 18 tests now query rendered cards correctly
-[UNPREDICTED] | `@testing-library/jest-dom` | `expect.extend` required global `expect` but vitest globals are off | Used `import { expect as jestExpect } from 'vitest'; jestExpect.extend(matchers)` plus `/// <reference types="@testing-library/jest-dom/vitest" />` for TypeScript types
-[UNPREDICTED] | `react-hooks/exhaustive-deps` eslint rule | referenced in disable comments but not in eslint config | Removed the eslint-disable comments; the underlying empty deps arrays are intentional and safe without the annotation
+---
 
-**Deviations (frontend):**
-- `chat_send` Tauri command receives a new `agent_mode: boolean` field in the request struct. The backend `chat_send` handler in `src-tauri/src/commands/chat.rs` will need to accept and thread this through to the executor in Phase 6b (or a small follow-up patch). The field is sent from the frontend; the current backend stub ignores unknown fields gracefully.
-- `fs_list_workspace_files` Tauri command is invoked for the mention picker. This command is planned in Phase 3 but may not yet exist. The `invoke` call is wrapped in a try/catch that silently returns an empty list, so the picker shows "No matching files" rather than crashing.
+### Phase 6a-iv — Cross-Provider Acceptance Tests + `@`-Mention + Drag-Drop
 
-**New findings (frontend):**
-- The `chat_send` backend command struct will need `agent_mode: bool` added when Phase 6b wires the executor. Noted as a Phase 6b prerequisite.
-- `fs_list_workspace_files` (Phase 3) is called speculatively from the mention picker; Phase 3 should verify this command name matches the actual Phase 3 export.
+**Goal:** Run all Phase 6a acceptance criteria: the canonical 3-tool agent-mode demo against Anthropic and Ollama, the cross-provider event-shape snapshot test, the tool-card render latency gate, and the `@`-mention + drag-drop wiring in ChatPanel.
 
-**Follow-ups (frontend):**
-- The mention picker currently fuzzy-searches via `fs_list_workspace_files` which doesn't exist until Phase 3 is wired. Add a Phase 3 follow-up to verify the command name and parameter shape matches the picker's `invoke('fs_list_workspace_files', { query, limit })` call.
-- Virtuoso's `VirtuosoHandle` ref in `ChatPanel` will warn in jsdom tests (ref forwarding not implemented in mock). Benign; can be suppressed by adding `React.forwardRef` to the mock if the warning becomes noise.
+**Deliverables:**
+- `tests/e2e/agent-mode-demo.spec.ts` — Playwright test sending the exact prompt `"List every file under src/ that contains the string TODO and summarize each TODO in one sentence"` to Anthropic (mocked via wiremock or a deterministic fixture), asserting: (1) `search_code` tool call with `query: "TODO"` and `glob: "src/**"` appears in `AgentActivityPanel`; (2) one `read_file` card per match; (3) final text message contains at least one summary sentence. (Ollama row marked `@skip` in CI — mandatory on the Gemma 4 smoke machine per Phase 10.)
+- `tests/provider-event-shape.spec.ts` — Playwright/Vitest snapshot test asserting the sequence `ToolCallStart → ToolCallDelta* → ToolCallEnd` is present for all three providers when run against the canonical-tool-prompt fixture. Anthropic and OpenAI use wiremock fixtures; Ollama fixture is a deterministic NDJSON blob.
+- `tests/e2e/agent-tool-card-render.spec.ts` — e2e test: for each of the 3 tool calls in the canonical fixture, `performance.measure('tool_card_render_<id>', 'tool_call_start_<id>', 'tool_card_visible_<id>').duration < 250`.
+- `src/components/ChatPanel.tsx` — `@`-mention picker: verify it is already present from the prior execution session or add it. The picker opens on `onChange` when the textarea value ends with `@`. `@file` fuzzy-searches via `invoke('fs_list_workspace_files', { query, limit: 10 })` wrapped in `try/catch` (empty list on failure). Selecting a file inserts `@file:<path>` token.
+- `src/components/ChatPanel.tsx` — drag-file-into-chat: `onDrop` handler on the textarea inserts `@file:<path>` token for each dropped file from the workspace tree.
+- `tests/unit/agent-activity-panel.spec.tsx` — verify the 18-test suite (from execution notes) passes; if the file does not exist, create it covering: render gate (< 250ms), mention picker `onChange` trigger, drag-drop token, agent mode toggle, tool-card status transitions.
+- `pnpm test` (unit suite) exits 0.
+- `pnpm check:types` exits 0.
+- `pnpm check:i18n` exits 0.
+- `cargo test` (workspace) exits 0.
 
-#### Pre-Mortem (Frontend Half)
+**Acceptance criteria:**
+- [ ] `pnpm test` exits 0 (all Vitest unit tests including `tests/unit/agent-activity-panel.spec.tsx` and `tests/unit/agentStore.spec.ts`).
+- [ ] `pnpm exec playwright test tests/e2e/agent-mode-demo.spec.ts` exits 0 (Anthropic fixture only; Ollama row skipped in CI).
+- [ ] `pnpm exec playwright test tests/provider-event-shape.spec.ts` exits 0 for Anthropic and OpenAI rows; Ollama row passes with deterministic NDJSON fixture.
+- [ ] `pnpm exec playwright test tests/e2e/agent-tool-card-render.spec.ts` exits 0; all three tool-card measures are `< 250ms`.
+- [ ] **Read-only safety:** calling `invoke('agent_run', { ... })` with a prompt that causes the model to call `write_file` returns a `ToolError` with message containing `"tool not available"` (verified by a Playwright fixture that returns a `write_file` tool call from the mock provider).
+- [ ] **Agent pause:** in a Playwright test, starting a long agent run (fixture returns 10 sequential tool calls), calling `invoke('agent_pause')`, and asserting the run stops within 5 seconds (measured by awaiting the `agent:event` stream closing).
+- [ ] Typing `@` in the ChatPanel textarea opens the mention picker (unit test `opens when the textarea value ends with "@"` passes).
+- [ ] Dropping a file token onto the ChatPanel textarea inserts `@file:<path>` (unit test `inserts @file token on drop` passes).
+- [ ] `cargo test` (full workspace) exits 0.
+- [ ] `pnpm check:types` exits 0.
+- [ ] `pnpm check:i18n` exits 0.
 
-[PM-04] `AgentActivityPanel.tsx::MutationObserver` | `performance.mark` emitted after React commit, but MutationObserver callback fires asynchronously in a microtask — the mark for `tool_card_visible_<id>` may land AFTER the measure interval closes if the observer batches mutations across frames, producing a negative or zero duration that fails the 250ms gate assertion.
+**Dependencies:** Phase 6a-iii (capability files + E007/E019 in place; `ollama_check_and_install` command registered; `supports_tools` fix applied).
+**Complexity:** Medium.
+**Status:** Not Started.
 
-[PM-05] `ChatPanel.tsx::@-mention picker` | `KeyboardEvent` for `@` key fires `onChange` AFTER the character is already in the textarea value — the picker open-trigger reads `e.key === '@'` in `onKeyDown` but at that point `input` state has not yet updated, so the picker must either re-read `e.target.value` directly or trigger in `onChange` when the new value ends with `@`, otherwise the picker never opens when `@` is preceded by other text.
+**Split rationale:** Acceptance tests require all prior sub-phases to be complete — the Tauri commands must be wired (6a-ii), capability files must allow HTTP (6a-iii), and error codes must be registered (6a-iii). Running tests before those gates are in place produces false negatives. Keeping this as a separate sub-phase also gives the reviewer a clean "everything-green" checkpoint before Phase 6b begins, which is the highest-risk phase in the project.
 
-[PM-06] `AgentActivityPanel.tsx` | `tool_call_start` events arrive on a Tauri event channel that requires `listen()` to be called with the full channel name `biscuitcode:chat-event:<convId>` — but AgentActivityPanel does not own the `conversationId` and ChatPanel does not expose it, so AgentActivityPanel either cannot subscribe to events at all or must share state via a new store entry; without a shared store the panel renders zero cards.
+#### Pre-Mortem
+
+#### Execution Notes
 
 ---
 
@@ -910,7 +943,7 @@ The prior coder's partial work left three active failures. Before fixing them:
 - [ ] **Snapshot integrity:** after a multi-step agent run that edits 3 files, rewind restores all 3 to their pre-run state byte-identical (`sha256sum` matches).
 - [ ] **Snapshot crash safety:** killing the app mid-write-tool leaves the snapshot manifest in a recoverable state (next launch can complete the rewind cleanly).
 
-**Dependencies:** Phase 3 (file system, tabs, diff-editor stub), Phase 6a (read-only tools, executor, agent activity UI).
+**Dependencies:** Phase 3 (file system, tabs, diff-editor stub), Phase 6a-iv (read-only tools, executor, agent activity UI, all acceptance tests green).
 **Complexity:** High.
 **Split rationale:** This is the highest-risk subsystem in the project — a correctness bug in rewind could delete user code. Splitting it from 6a means the read-only agent stays shippable if 6b needs replanning. Inline edit is in this phase rather than Phase 3 because it depends on the provider (Phase 5) and on the confirmation/diff UX this phase defines. Rewind is here too because its snapshots are a side-effect of the write tool's execution, not a later add-on.
 **Status:** Complete
@@ -1108,7 +1141,7 @@ The prior coder's partial work left three active failures. Before fixing them:
 - [ ] **Snapshot cleanup:** running the cleanup task on a workspace with a 31-day-old closed-conversation snapshot deletes the snapshot directory; an open conversation's snapshots are untouched regardless of age.
 - [ ] **Font canary:** simulating Inter load failure (delete woff2 in dev) triggers `E016 FontLoadFailed` toast on next launch.
 
-**Dependencies:** Phase 5 (onboarding needs keyring + Anthropic), Phase 6a (Ollama install path).
+**Dependencies:** Phase 5 (onboarding needs keyring + Anthropic), Phase 6a-iv (Ollama install path, all provider badges live).
 **Complexity:** Medium.
 **Split rationale:** Onboarding + settings + theming + icon + data polish cluster naturally as user-chrome work that needs the provider setup from Phase 5/6a and the data layer from Phase 5. Doing this before Phase 9 (a11y + error consolidation) is critical because a11y audit needs the final UI surface to audit. Conversation branching ships here (rather than 6b) because it's a DB-pure feature that needs no agent involvement — it's polish on top of Phase 5's persistence.
 **Status:** Complete
@@ -1395,3 +1428,17 @@ Carried forward from both rounds. None block execution; all have planner-default
 19. **(Phase 7 → Phase 8 → Phase 9 coder; DEFERRED beyond Phase 9)** **`monaco-languageclient` frontend adapter not implemented.** Phase 9 coder evaluated `monaco-languageclient` v10.7.0: it pulls in 20+ `@codingame/monaco-vscode-api` packages (full VS Code extension host repackaged) with documented Vite ESM issues that require major `vite.config.ts` surgery. Installing it mid-phase risked breaking the build without providing a clear path to a clean compile. Decision: defer to a dedicated follow-up task. The AC "hover shows type, go-to-definition jumps correctly" remains unmet. Phase 10 coder should not assume this is available.
 
 16. **(Synthesis-added, RESOLVED 2026-04-18)** ~~Gemma 4 exact tag names.~~ **Resolved by direct verification against `https://ollama.com/library/gemma4`:** the actual tags are `gemma4:e2b` (2.3B effective, 7.2GB), `gemma4:e4b` (4.5B effective, 9.6GB, also `:latest`), `gemma4:26b` (MoE 25.2B/3.8B active, 18GB), `gemma4:31b` (30.7B, 20GB). Naming convention is `e<N>b` for edge variants and plain integers for full-size — different from the Gemma 3 family. The synthesis pass had extrapolated `gemma4:9b` / `gemma4:27b` which do not exist. **Plan updated.** Minimum Ollama version for Gemma 4 = `0.20.0` (released 2026-04-03 same-day as the Gemma 4 model drop). Open known issue: tool-call streaming via Ollama's OpenAI-compatible API has bugs (GitHub anomalyco/opencode#20995); we use `/api/chat` directly which is unaffected.
+
+20. **(Phase 6a research, 2026-04-20; DECIDED in plan 2026-04-20)** ~~`supports_tools` in `OllamaProvider::list_models` — whitelist vs. permissive default.~~ **DECIDED:** permissive `true` for all models; selective `false` only for known embedding/vision-only name patterns. See Architecture Decision [6a-Q1]. Whitelist expansion is not needed.
+
+21. **(Phase 6a research, 2026-04-20; DECIDED in plan 2026-04-20)** ~~Ollama daemon-down error code — new `E019` vs. subsume under `E005`.~~ **DECIDED:** new `E019 OllamaDaemonDown`. See Architecture Decision [6a-Q2].
+
+22. **(Phase 6a research, 2026-04-20; DECIDED in plan 2026-04-20)** ~~Tauri event emission pattern — single `"agent:event"` vs. per-variant event names.~~ **DECIDED:** single `"agent:event"` with tagged `ChatEvent` payload. See Architecture Decision [6a-Q3].
+
+23. **(Phase 6a research, 2026-04-20; DEFERRED to v1.1)** **Read deny-list for sensitive files (`.env*`, `*.pem`).** CAPABILITIES.md's deny-list applies only to write tools. Blocking reads of secrets files is a security hardening item. Default: do not add a read deny-list in Phase 6a. Revisit in v1.1 security audit.
+
+24. **(Phase 6a research, 2026-04-20; DECIDED in plan 2026-04-20)** **`curl` availability check before Ollama install.** The `ollama-install` shell capability uses `curl`. Default adopted: check `which curl` before showing the install offer; if absent, show an error asking the user to install `curl` first. The 6a-iii coder must implement this check in `ollama_check_and_install`.
+
+25. **(Phase 6a research, 2026-04-20; DECIDED in plan 2026-04-20)** **`agentStore` scope — shared vs. separate.** `agentStore` is a single shared Zustand store; `ChatPanel` syncs its `conversationId` to the store; `AgentActivityPanel` reads `cards` without needing a direct event subscription. This matches the approach in the execution notes (PM-06 avoidance).
+
+26. **(Phase 6a research, 2026-04-20; DECIDED in plan 2026-04-20)** **Ollama CI test — optional vs. mandatory.** The Ollama acceptance-test row is `@skip` in CI (no 9.6GB model available). It is mandatory for the Phase 10 release smoke test on the Mint 22 XFCE machine with `gemma4:e4b` loaded. This mirrors the decision for the existing Anthropic E2E fixture approach.
