@@ -16,6 +16,8 @@ import { useTranslation } from 'react-i18next';
 import Editor, { useMonaco } from '@monaco-editor/react';
 import { invoke } from '@tauri-apps/api/core';
 import { useEditorStore } from '../state/editorStore';
+import { LspClient, registerLspProviders, monacoLangToLsp, extToMonacoLang } from '../lsp/lspClient';
+import type * as Monaco from 'monaco-editor';
 
 // ---------------------------------------------------------------------------
 // Quick-Open palette component
@@ -370,6 +372,58 @@ function MonacoPane({ tabId }: MonacoPaneProps) {
 }
 
 // ---------------------------------------------------------------------------
+// LSP connection hook
+//
+// Manages one LspClient per (language, workspaceRoot) pair.
+// Registers Monaco hover + definition providers once per pair.
+// Idempotent: switching tabs to the same language reuses the existing session
+// (PM-02 mitigation).
+// ---------------------------------------------------------------------------
+
+// Module-level map: "lang:workspace" → LspClient
+// Using a module-level map avoids React state churn and keeps clients alive
+// across re-renders.
+const _lspClients = new Map<string, LspClient>();
+const _lspProviders = new Map<string, Monaco.IDisposable>();
+
+function useLspConnection(
+  monacoInstance: typeof Monaco | null,
+  activeTabPath: string | null,
+  workspaceRoot: string | null,
+) {
+  useEffect(() => {
+    if (!monacoInstance || !activeTabPath || !workspaceRoot) return;
+
+    const ext = activeTabPath.split('.').pop() ?? '';
+    const monacoLangId = extToMonacoLang(ext);
+    const lspLang = monacoLangToLsp(monacoLangId);
+    if (!lspLang) return; // unsupported language — no-op (PM-03 mitigation)
+
+    const key = `${lspLang}:${workspaceRoot}`;
+
+    // Reuse existing client if already created.
+    let client = _lspClients.get(key);
+    if (!client) {
+      client = new LspClient(lspLang, workspaceRoot, monacoInstance);
+      _lspClients.set(key, client);
+    }
+
+    // Kick off the session (idempotent).
+    void client.ensureSession().catch(() => {/* server not installed — silently no-op */});
+
+    // Register Monaco providers once per key.
+    if (!_lspProviders.has(key)) {
+      const disposable = registerLspProviders(monacoInstance, client, monacoLangId);
+      _lspProviders.set(key, disposable);
+    }
+
+    // No cleanup here: providers and sessions live for the app lifetime once
+    // registered. Sessions are shut down via lsp_list_sessions cleanup on
+    // workspace change (future work).
+  }, [monacoInstance, activeTabPath, workspaceRoot]);
+}
+
+// ---------------------------------------------------------------------------
 // EditorArea — main export
 // ---------------------------------------------------------------------------
 
@@ -388,6 +442,11 @@ export function EditorArea() {
     toggleSplit,
     setSplitTab,
   } = useEditorStore();
+
+  // LSP connection: wire hover/definition providers to the Rust LSP backend.
+  const monacoInstance = useMonaco();
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
+  useLspConnection(monacoInstance, activeTab?.path ?? null, workspaceRoot);
 
   const [quickOpenVisible, setQuickOpenVisible] = useState(false);
 
