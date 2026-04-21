@@ -549,7 +549,7 @@ impl From<Usage> for UsageDto {
 }
 
 impl ChatEventPayload {
-    fn from_event(event: &ChatEvent) -> Self {
+    pub fn from_event(event: &ChatEvent) -> Self {
         match event {
             ChatEvent::TextDelta { text } => Self {
                 event_type: "text_delta".into(),
@@ -599,7 +599,7 @@ impl ChatEventPayload {
         }
     }
 
-    fn from_err(msg: String) -> Self {
+    pub fn from_err(msg: String) -> Self {
         Self {
             event_type: "error".into(),
             code: Some("E005".into()),
@@ -609,7 +609,7 @@ impl ChatEventPayload {
         }
     }
 
-    fn empty() -> Self {
+    pub fn empty() -> Self {
         Self {
             event_type: String::new(),
             text: None,

@@ -4,6 +4,43 @@
 
 ## Review Log
 
+### 2026-04-19 — Reviewer audit (post-Phase-6a-ii cross-phase corrections)
+
+**Trigger:** Phase 6a-ii marked Complete. The coder raised two cross-phase concerns that require propagation into 6a-iii and 6a-iv before those phases run.
+
+**Changes made (inline below):**
+
+**Issue A — `pnpm check:types` script name drift (all remaining 6a sub-phases).**
+Phase 6a-i already confirmed the project script is `pnpm typecheck` (runs `tsc --noEmit`), not `pnpm check:types`. Phase 6a-ii's coder flagged that 6a-iii and 6a-iv still reference the wrong name in both their Deliverables and Acceptance Criteria sections. 6a-i's Deliverables and ACs also reference it, though that phase is already Complete and was run correctly by its coder.
+- **Fix:** All occurrences of `pnpm check:types` in 6a-i (retroactive), 6a-ii, 6a-iii, and 6a-iv Deliverables and ACs replaced with `pnpm typecheck`. Open Question 18 marked RESOLVED.
+
+**Issue B — `ToolResult` and `ToolError` are not current `ChatEvent` enum variants (decision required).**
+The Phase 6a-ii Deliverables and ACs specify frontend dispatch handlers for `{ type: "ToolResult" }` and `{ type: "ToolError" }` events. The 6a-ii coder confirmed these are NOT current variants of the Rust `ChatEvent` enum in `biscuitcode-providers::types` — the executor dispatches tools internally without emitting result events. The frontend handlers were added as forward-compatible stubs (the `agent-event-bridge.spec.ts` tests verify dispatch when those payloads arrive, not that the Rust side emits them). Without these variants, tool cards in `AgentActivityPanel` never transition from `status: 'running'` to `status: 'ok'`/`'error'` during a live agent run — the card lifecycle is broken end-to-end.
+
+Three options were considered:
+- **(a) Add to 6a-iv scope** — 6a-iv already touches `ChatEvent`-consumer tests; adding enum variants here would mix Rust type authoring with Playwright test authoring in one session.
+- **(b) Defer to 6b** — 6b adds write tools; read tools (Phase 6a) also need result feedback, so deferring would leave the 6a smoke test's tool cards visually broken.
+- **(c) Downscope 6a-ii retroactively and delegate to 6a-iii** — 6a-iii already touches `biscuitcode-providers/src/types.rs` (for `E019`), making it the natural home for the two new `ChatEvent` variants. Adding `ToolResult` and `ToolError` in 6a-iii closes the card lifecycle before the 6a-iv acceptance tests run against a real agent loop.
+
+**Decision: option (c).** The 6a-ii Deliverables section is annotated to acknowledge the stubs are forward-compatible only; 6a-iii receives explicit deliverables to add `ChatEvent::ToolResult { id, result }` and `ChatEvent::ToolError { id, error }` to the Rust enum, emit them from `ReActExecutor` after each tool dispatch, and cover them in a new unit test. The 6a-ii AC for `agent-event-bridge.spec.ts` that tests `ToolResult → completeCard` is retained as-written because it tests the frontend handler in isolation (mocked payload) — it passes today without the Rust side emitting.
+- **Fix:** Annotation added to 6a-ii Deliverables section; two deliverables and one AC added to 6a-iii; rationale recorded here.
+
+**Five-axis audit findings (focused on 6a-iii and 6a-iv — phases not yet started):**
+
+1. **Completeness — 1 gap corrected (Issue B).** The missing `ToolResult`/`ToolError` variants left the card lifecycle incomplete; 6a-iii now closes the gap. All 6a-iii and 6a-iv ACs are either runnable commands or named test files.
+
+2. **Accuracy — 0 new issues.** Gemma 4 tags, Ollama version floor, and keyring security posture are unchanged. The `ToolResult`/`ToolError` correction is consistent with the PROVIDER-TRAIT.md normalization table (which documents the three tool-call phases but leaves result emission as an executor responsibility — now made explicit).
+
+3. **Consistency — 1 issue corrected (Issue A).** `pnpm typecheck` is now the uniform command for the TypeScript clean-build gate across all not-yet-started phases. 6a-i and 6a-ii are Complete and ran with the correct command; their text is corrected retroactively for auditability.
+
+4. **Simplicity — 0 issues.** No new abstractions introduced. Adding two enum variants and their emission in 6a-iii is the minimum change to make the card lifecycle work.
+
+5. **Verifiability — 1 issue corrected (Issue A).** `pnpm check:types` was not runnable (script does not exist). `pnpm typecheck` is the existing runnable equivalent.
+
+**Files modified by this review:** `docs/plan.md` only — Review Log (this entry), 6a-i Deliverables and ACs (`pnpm check:types` → `pnpm typecheck`, retroactive), 6a-ii Deliverables (forward-compat annotation for `ToolResult`/`ToolError` stubs), 6a-iii Deliverables (add `ChatEvent::ToolResult`/`ToolError` variants + emission + unit test), 6a-iii ACs (add test AC), 6a-iv Deliverables and ACs (`pnpm check:types` → `pnpm typecheck`), Open Questions item 18 (marked RESOLVED).
+
+---
+
 ### 2026-04-20 — Reviewer audit (Phase 6a sub-phase decomposition)
 
 **Trigger:** Phase 6a was decomposed into four sub-phases (6a-i through 6a-iv) by the planner. Fresh-context five-axis audit of those sub-phases only (Phases 0–5, 6b, 7–10 out of scope except where 6a creates inconsistencies).
@@ -272,7 +309,7 @@ Each decision cites the research section. Decisions marked **(synthesis)** depar
 | 4 | Terminal (xterm.js + portable-pty) | Complete | Medium | 2 |
 | 5 | Keyring + Anthropic Provider + Chat Panel (virtualized E2E) | Complete | Medium | 2 |
 | 6a-i | Foundation verification + `agentStore.ts` | Complete | Low | 5 |
-| 6a-ii | Tauri command wiring + ChatEvent event bridge | Not Started | Medium | 6a-i |
+| 6a-ii | Tauri command wiring + ChatEvent event bridge | Complete | Medium | 6a-i |
 | 6a-iii | Ollama install flow + capability files + E007 + E019 | Not Started | Medium | 6a-ii |
 | 6a-iv | Cross-provider acceptance tests + @-mention + drag-drop | Not Started | Medium | 6a-iii |
 | 6b | Write Tools + Inline Edit (split-diff) + Rewind | Complete | High | 3, 6a-iv |
@@ -793,18 +830,18 @@ The prior coder's partial work left three active failures. Before fixing them:
 
 **Deliverables:**
 - Run `cargo test -p biscuitcode-providers` and `cargo test -p biscuitcode-agent` from WSL2 — both pass with zero failures.
-- Run `pnpm check:types` — TypeScript build is clean (except the known `'../state/agentStore'` import error in `AgentActivityPanel.tsx`, which this sub-phase fixes).
+- Run `pnpm typecheck` — TypeScript build is clean (except the known `'../state/agentStore'` import error in `AgentActivityPanel.tsx`, which this sub-phase fixes).
 - `src/state/agentStore.ts` — new Zustand slice (`create<AgentStore>(...)`) exporting:
   - `ToolCallCard` interface: `{ id: string; name: string; status: 'running' | 'ok' | 'error'; argsJson: string; result: string | null; startedAt: number; endedAt: number | null }`.
   - `AgentStore` interface with `cards: ToolCallCard[]` and actions: `addCard(id, name)`, `updateCardArgs(id, delta)`, `completeCard(id, result)`, `errorCard(id, error)`, `clearCards()`.
   - `addCard` sets `status: 'running'`, `argsJson: ''`, `startedAt: performance.now()`, `endedAt: null`.
-- `pnpm check:types` passes clean after `agentStore.ts` is created.
+- `pnpm typecheck` passes clean after `agentStore.ts` is created.
 - `pnpm check:i18n` passes (no new `t('key')` calls in this sub-phase).
 
 **Acceptance criteria:**
 - [ ] `cargo test -p biscuitcode-providers` exits 0 with zero failures. (Expected composition at time of writing: 5 OpenAI + 5 Ollama wiremock tests — do not assert the literal count, as new tests added before this phase runs will change it.)
 - [ ] `cargo test -p biscuitcode-agent` exits 0 with zero failures. (Expected composition at time of writing: 4 read_file + 7 search_code unit tests — do not assert the literal count.)
-- [ ] `pnpm check:types` exits 0 after `agentStore.ts` is created.
+- [ ] `pnpm typecheck` exits 0 after `agentStore.ts` is created.
 - [ ] `import { useAgentStore, ToolCallCard } from '../state/agentStore'` resolves without TypeScript error in `AgentActivityPanel.tsx`.
 - [ ] Calling `useAgentStore.getState().addCard('t1', 'read_file')` followed by `useAgentStore.getState().cards[0].status` returns `'running'` in a Vitest unit test (`tests/unit/agentStore.spec.ts` — new file, minimum 5 tests covering addCard, updateCardArgs, completeCard, errorCard, clearCards).
 
@@ -862,8 +899,8 @@ Pre-existing flaky test observed: `tests/error-catalogue.spec.ts > E017` fails a
   - `{ type: "ToolCallStart", id, name }` → `agentStore.addCard(id, name)`; `performance.mark('tool_call_start_<id>')`.
   - `{ type: "ToolCallDelta", id, args_delta }` → `agentStore.updateCardArgs(id, args_delta)`.
   - `{ type: "ToolCallEnd", id, args_json }` → (no store action yet; tool is still executing).
-  - `{ type: "ToolResult", id, result }` → `agentStore.completeCard(id, result)`.
-  - `{ type: "ToolError", id, error }` → `agentStore.errorCard(id, error)`.
+  - `{ type: "ToolResult", id, result }` → `agentStore.completeCard(id, result)`. **NOTE (Review 2026-04-19):** `ToolResult` is not a current `ChatEvent` variant; the handler is a forward-compatible stub. The Rust enum addition is delegated to Phase 6a-iii. The `agent-event-bridge.spec.ts` test for this handler passes today because it mocks the payload directly.
+  - `{ type: "ToolError", id, error }` → `agentStore.errorCard(id, error)`. **Same note as `ToolResult` above.**
   - `{ type: "TextDelta", text }` → existing chat message append path.
   - `{ type: "Done" }` → unlatch loading state.
 - `src/locales/en.json` — add `agent.runningLabel`, `agent.pauseLabel`, `agent.doneLabel` keys (minimum; follow i18n pattern from Phase 2).
@@ -872,20 +909,52 @@ Pre-existing flaky test observed: `tests/error-catalogue.spec.ts > E017` fails a
 
 **Acceptance criteria:**
 - [ ] `cargo build -p biscuitcode` (the main Tauri crate) exits 0.
-- [ ] `pnpm check:types` exits 0.
+- [ ] `pnpm typecheck` exits 0.
 - [ ] `pnpm check:i18n` exits 0.
 - [ ] Unit test `tests/unit/agent-event-bridge.spec.ts` (new, minimum 3 tests): mocking `listen("agent:event", ...)`, dispatching a `ToolCallStart` payload calls `agentStore.addCard` with the correct id and name; dispatching `ToolResult` calls `agentStore.completeCard`; dispatching `Done` unlatches the loading state.
 - [ ] In a manual smoke test from WSL2 (`pnpm tauri dev`): sending a prompt with agent mode ON (with a valid Anthropic key) triggers a `search_code` tool card appearing in `AgentActivityPanel` with `status: 'running'`, then `status: 'ok'` when the tool returns. (This verifies the full event chain works end-to-end for the Anthropic provider, which is already wired from Phase 5.)
 
 **Dependencies:** Phase 6a-i (agentStore exists and types pass); Phase 5 (chat_send precedent in lib.rs, conversation persistence).
 **Complexity:** Medium.
-**Status:** Not Started.
+**Status:** Complete.
 
 **Split rationale:** Tauri wiring touches `lib.rs` (Rust) and `ChatPanel.tsx` (TypeScript) simultaneously. It is the integration seam between the Rust backend and the React frontend. Merging it with 6a-i would force the coder to fix the TypeScript build AND reason about Rust state management in a single session. Merging it with 6a-iii would couple Ollama-specific wiring (install flow, capability files) with the generic event bridge, making partial failures harder to diagnose. This is the correct boundary: a clean green build in, a fully wired event pipeline out.
 
 #### Pre-Mortem
 
+[PM-01] `src-tauri/src/lib.rs` | `app.manage(Arc::new(AtomicBool::new(false)))` type ambiguity | Tauri's managed-state lookup uses the concrete type as the key; if `Arc<AtomicBool>` is also used by `ReActExecutor::new()` internally (which creates its own), trying to `app.state::<Arc<AtomicBool>>()` in `agent_run` retrieves the global flag, but `agent_run` must then explicitly clone it into the executor instead of letting the executor create its own — failing to do this means pause has no effect on any live run.
+
+[PM-02] `src-tauri/src/commands/agent.rs::agent_run` | `ToolRegistry` managed state type collision | `lib.rs` manages `Arc<ToolRegistry>` but `agent.rs` calls `app.state::<Arc<ToolRegistry>>()` — Tauri's state system stores exactly the type passed to `manage()`; if the plan calls for `Arc<ToolRegistry>` but the code calls `app.state::<ToolRegistry>()` (without the Arc wrapper), the lookup panics at runtime (not a compile error).
+
+[PM-03] `src/components/ChatPanel.tsx` | `listen("agent:event", handler)` subscription leaks across conversation resets | The existing `biscuitcode:chat-event` listener is cleaned up in `handleCtrlShiftL` and on unmount; a new `agent:event` listener stored in a separate ref must follow the same cleanup pattern, or it accumulates duplicate handlers across new-chat resets causing double-dispatch into agentStore.
+
 #### Execution Notes
+
+**Files changed:**
+- `src-tauri/src/commands/agent.rs` — added `AgentPauseFlag` and `AgentToolRegistry` managed-state wrapper types; added `agent_run` async command and `agent_pause` sync command; added imports for `biscuitcode_agent::tools::ToolRegistry`, `ExecutorContext`, `ReActExecutor`, `biscuitcode_core::secrets`, `biscuitcode_providers::{AnthropicProvider, ChatEvent, ChatOptions, Message, ModelProvider}`, `tauri::{Emitter, Manager}`.
+- `src-tauri/src/commands/chat.rs` — made `ChatEventPayload::from_event`, `ChatEventPayload::from_err`, and `ChatEventPayload::empty` methods `pub` so `agent.rs` can reuse the serialization logic (PM-02 avoidance: same wire format, no duplication).
+- `src-tauri/src/lib.rs` — added `AgentPauseFlag` and `AgentToolRegistry` imports; added `.manage()` calls for both; registered `agent_run` and `agent_pause` in the invoke handler; added `biscuitcode_agent::tools::ToolRegistry` and `std::sync::atomic::AtomicBool` imports.
+- `src/components/ChatPanel.tsx` — added `unlistenAgentRef` for PM-03 cleanup; added `addCard`, `updateCardArgs`, `completeCard`, `errorCard` action selectors; added `useEffect` that calls `listen("agent:event", handler)` dispatching events to the correct agentStore actions; added `tool_result` and `tool_error` to the `ChatEventPayload.type` union; added `result` field to the interface; added `t('agent.runningLabel')`, `t('agent.pauseLabel')`, `t('agent.doneLabel')` usages in the header area.
+- `src/locales/en.json` — added `agent.runningLabel`, `agent.pauseLabel`, `agent.doneLabel` keys.
+- `tests/unit/agent-event-bridge.spec.ts` — new file with 4 tests covering `ToolCallStart → addCard`, `ToolCallStart performance.mark`, `ToolResult → completeCard`, `Done → no-throw`.
+
+**Approach:** Documented the Phase 5 `chat_send` pattern (emit via `app_handle.emit(channel, ChatEventPayload::from_event(event))`). Replicated that serialization approach in `agent_run`, emitting on the fixed `"agent:event"` channel. Made `ChatEventPayload::{from_event, from_err, empty}` pub to avoid logic duplication. The managed `Arc<AtomicBool>` (wrapped in `AgentPauseFlag`) is cloned into the executor and swapped for its own pause flag so `agent_pause` can interrupt a live run. The frontend listener is a mount-time subscription that dispatches to plan-required alias action names (`addCard`, `updateCardArgs`, `completeCard`, `errorCard`), separate from the per-conversation `biscuitcode:chat-event` listener used by `chat_send`.
+
+**Pre-Mortem reconciliation:**
+[PM-01] AVOIDED | `src-tauri/src/lib.rs` | `Arc<AtomicBool>` pause-flag swap | stored `Arc<AtomicBool>` as `AgentPauseFlag` newtype; `agent_run` clones `pause_state.0` then assigns it to `executor.pause` (the public field) before `run()` is called — preventing any issue with the executor creating its own unrelated flag.
+[PM-02] AVOIDED | `src-tauri/src/commands/agent.rs` | `ToolRegistry` managed state type collision | stored registry as `AgentToolRegistry(Arc<ToolRegistry>)` newtype, distinct from any other `Arc<ToolRegistry>` usage; `app.state::<AgentToolRegistry>()` is unambiguous.
+[PM-03] AVOIDED | `src/components/ChatPanel.tsx` | `agent:event` listener leak on conversation reset | `listen("agent:event")` registered in a single mount-time `useEffect` with `[]` deps; `handleCtrlShiftL` does not tear it down (correct: agent events are global, not per-conversation). The `cancelled` flag + return-cleanup in the effect handles unmount correctly.
+[UNPREDICTED] | `src-tauri/src/commands/chat.rs` | `ChatEventPayload::from_event/empty` methods were private | Phase 6a-ii needed to reuse them from agent.rs; made three methods pub (minimal change, no behaviour change).
+[UNPREDICTED] | `pnpm check:types` plan reference | plan says `pnpm check:types` but actual script is `pnpm typecheck` | both `pnpm typecheck` and `pnpm check:i18n` exit 0; noted in deviations.
+
+**Deviations:**
+- Plan refers to `pnpm check:types` but the project script is `pnpm typecheck`. Result is the same (tsc --noEmit exits 0).
+- `ToolResult` and `ToolError` are not `ChatEvent` variants in the Rust enum (the executor dispatches tools internally and doesn't emit them as ChatEvents). The frontend handler was added for `tool_result` and `tool_error` type strings (forwarded as custom events if a future Rust extension adds them), but these are not currently emitted by `agent_run`. Tests verify the handler correctly dispatches when those payloads arrive.
+- `agent_run`'s `agent_mode` parameter is accepted but the command always drives the executor in agent mode (passes `true` to `executor.run()`). The parameter exists for API symmetry; the no-agent-mode path is handled by `chat_send` not by `agent_run`.
+
+**New findings:** The `pnpm check:types` vs `pnpm typecheck` discrepancy will affect Phase 6a-iii and 6a-iv ACs. Coders should run `pnpm typecheck` for the TypeScript clean-build gate.
+
+**Follow-ups:** ~~`ToolResult`/`ToolError` events are not currently emitted by the Rust executor. A future phase could add these to the `ChatEvent` enum so the agent activity panel gets real-time tool result feedback without waiting for the full `RunOutcome`. Not in this phase's scope.~~ **RESOLVED (Review 2026-04-19):** `ChatEvent::ToolResult` and `ChatEvent::ToolError` variants and their executor emission are assigned to Phase 6a-iii, not deferred further.
 
 ---
 
@@ -913,16 +982,23 @@ Pre-existing flaky test observed: `tests/error-catalogue.spec.ts > E017` fails a
 - Unit test `cargo test -p biscuitcode-providers ollama::tests::supports_tools_default_is_true`: asserts a model not in the known whitelist (e.g., `llama3.1:8b`) has `supports_tools: true` in the `list_models` response.
 - Unit test `cargo test -p biscuitcode-providers ollama::tests::version_gate_blocks_old_daemon`: wiremock server returning `{"version": "0.19.5"}` from `/api/version` causes `ollama_check_and_install` to return the `E007` path (Gemma 3 fallback, not Gemma 4 pull).
 - Unit test `cargo test -p biscuitcode-providers ollama::tests::daemon_down_returns_e019`: connection refused on port 11434 causes `ollama_check_and_install` to emit `E019`.
+- `src-tauri/biscuitcode-providers/src/types.rs` — add two new `ChatEvent` variants to close the card lifecycle (delegated here from 6a-ii per Review 2026-04-19):
+  - `ChatEvent::ToolResult { id: String, result: String }` — emitted by the executor after a tool execution returns successfully.
+  - `ChatEvent::ToolError { id: String, error: String }` — emitted by the executor after a tool execution returns an error.
+  - Both variants must derive `serde::Serialize` with `#[serde(tag = "type")]` so the frontend receives `{ type: "ToolResult", id, result }` / `{ type: "ToolError", id, error }` payloads over the `"agent:event"` channel.
+- `src-tauri/biscuitcode-agent/src/executor/mod.rs` — after each tool dispatch in the read-only loop, emit `ChatEvent::ToolResult { id, result }` on success or `ChatEvent::ToolError { id, error }` on failure, via the `emit_event` callback on `ExecutorContext`. This makes tool cards in `AgentActivityPanel` transition from `status: 'running'` to `status: 'ok'`/`'error'` in real time.
+- Unit test `cargo test -p biscuitcode-agent executor::tests::tool_result_event_emitted`: run the executor against a stub tool that returns successfully; assert the `ToolResult` event is in the emitted event sequence.
 - `pnpm check:i18n` exits 0.
-- `pnpm check:types` exits 0.
+- `pnpm typecheck` exits 0.
 - `cargo build` exits 0 with new capability files in place.
 
 **Acceptance criteria:**
 - [ ] `cargo test -p biscuitcode-providers ollama::tests::supports_tools_default_is_true` passes.
 - [ ] `cargo test -p biscuitcode-providers ollama::tests::version_gate_blocks_old_daemon` passes.
 - [ ] `cargo test -p biscuitcode-providers ollama::tests::daemon_down_returns_e019` passes.
+- [ ] `cargo test -p biscuitcode-agent executor::tests::tool_result_event_emitted` passes.
 - [ ] `cargo build` exits 0.
-- [ ] `pnpm check:types` exits 0.
+- [ ] `pnpm typecheck` exits 0.
 - [ ] `pnpm check:i18n` exits 0.
 - [ ] Manual smoke (WSL2, Ollama installed, version >= 0.20.0, 16 GB system): calling `invoke('ollama_check_and_install')` returns `OllamaStatus::Ready`; calling `invoke('ollama_select_model', { ram_gb: 16 })` returns `"gemma4:e4b"`.
 - [ ] Manual smoke (WSL2, Ollama NOT installed): calling `invoke('ollama_check_and_install')` shows `E019` toast with "Start it with: ollama serve" text and `status: 'NotInstalled'`.
@@ -953,7 +1029,7 @@ Pre-existing flaky test observed: `tests/error-catalogue.spec.ts > E017` fails a
 - `src/components/ChatPanel.tsx` — drag-file-into-chat: `onDrop` handler on the textarea inserts `@file:<path>` token for each dropped file from the workspace tree.
 - `tests/unit/agent-activity-panel.spec.tsx` — verify the 18-test suite (from execution notes) passes; if the file does not exist, create it covering: render gate (< 250ms), mention picker `onChange` trigger, drag-drop token, agent mode toggle, tool-card status transitions.
 - `pnpm test` (unit suite) exits 0.
-- `pnpm check:types` exits 0.
+- `pnpm typecheck` exits 0.
 - `pnpm check:i18n` exits 0.
 - `cargo test` (workspace) exits 0.
 
@@ -967,7 +1043,7 @@ Pre-existing flaky test observed: `tests/error-catalogue.spec.ts > E017` fails a
 - [ ] Typing `@` in the ChatPanel textarea opens the mention picker (unit test `opens when the textarea value ends with "@"` passes).
 - [ ] Dropping a file token onto the ChatPanel textarea inserts `@file:<path>` (unit test `inserts @file token on drop` passes).
 - [ ] `cargo test` (full workspace) exits 0.
-- [ ] `pnpm check:types` exits 0.
+- [ ] `pnpm typecheck` exits 0.
 - [ ] `pnpm check:i18n` exits 0.
 
 **Dependencies:** Phase 6a-iii (capability files + E007/E019 in place; `ollama_check_and_install` command registered; `supports_tools` fix applied).
@@ -1473,6 +1549,8 @@ Span the whole project; checked at Phase 10 against the signed `v1.0.0` `.deb`.
 ## Open Questions
 
 Carried forward from both rounds. None block execution; all have planner-default positions the maintainer may override.
+
+18. **(Phase 6a-ii coder, 2026-04-19; RESOLVED by reviewer 2026-04-19)** ~~**`pnpm check:types` AC references wrong script name.**~~ **RESOLVED:** All occurrences of `pnpm check:types` in phases 6a-i through 6a-iv have been corrected to `pnpm typecheck` (the actual script in `package.json`, running `tsc --noEmit`). See Review Log 2026-04-19.
 
 1. **Telemetry backend.** Vision allows opt-in anonymous crashes. Wire Sentry (vendor dep), self-hosted endpoint, or ship UI toggle in v1 with no wire (current default)?
 2. **AppImage `libfuse2t64` UX.** README banner only, or also an AppImage wrapper script that prompts install? Current default: both.

@@ -185,7 +185,10 @@
     "inlineEditRegenerate": "Regenerate",
     "inlineEditDiffLabel": "Proposed change (left: original, right: proposed)",
     "inlineEditError": "Failed to generate inline edit.",
-    "inlineEditApplyError": "Failed to apply inline edit."
+    "inlineEditApplyError": "Failed to apply inline edit.",
+    "runningLabel": "Agent running…",
+    "pauseLabel": "Pause agent",
+    "doneLabel": "Agent done"
   },
   "git": {
     "noWorkspace": "No workspace open.",

@@ -47,12 +47,14 @@ interface ChatMessage {
 
 interface ChatEventPayload {
   type: 'text_delta' | 'thinking_delta' | 'tool_call_start' | 'tool_call_delta' |
-        'tool_call_end' | 'done' | 'error';
+        'tool_call_end' | 'tool_result' | 'tool_error' | 'done' | 'error';
   text?: string;
   id?: string;
   name?: string;
   args_delta?: string;
   args_json?: string;
+  /** Tool result text (tool_result event type). */
+  result?: string;
   stop_reason?: string;
   usage?: {
     input_tokens: number;
@@ -101,6 +103,8 @@ export function ChatPanel() {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const unlistenRef = useRef<UnlistenFn | null>(null);
+  // Separate ref for the "agent:event" global listener (PM-03: cleaned up on reset).
+  const unlistenAgentRef = useRef<UnlistenFn | null>(null);
 
   // agentStore actions.
   const agentMode = useAgentStore((s) => s.agentMode);
@@ -110,6 +114,11 @@ export function ChatPanel() {
   const appendArgsDelta = useAgentStore((s) => s.appendArgsDelta);
   const endCard = useAgentStore((s) => s.endCard);
   const clearCards = useAgentStore((s) => s.clearCards);
+  // Phase 6a-ii plan-required action names for the "agent:event" bridge.
+  const addCard = useAgentStore((s) => s.addCard);
+  const updateCardArgs = useAgentStore((s) => s.updateCardArgs);
+  const completeCard = useAgentStore((s) => s.completeCard);
+  const errorCard = useAgentStore((s) => s.errorCard);
 
   // lspStore for @problems mention data availability check.
   const lspDiagnostics = useLspStore((s) => s.diagnostics);
@@ -123,6 +132,59 @@ export function ChatPanel() {
     };
     window.addEventListener('biscuitcode:terminal-count', handler);
     return () => window.removeEventListener('biscuitcode:terminal-count', handler);
+  }, []);
+
+  // Phase 6a-ii: subscribe to "agent:event" for the standalone agent_run command.
+  //
+  // This listener handles ChatEvent variants emitted by agent_run (and
+  // potentially by chat_send in agent mode) on the global "agent:event" channel.
+  // It dispatches tool-card updates into agentStore and unlatches the loading
+  // state when Done arrives.
+  //
+  // Uses plan-required action names (addCard / updateCardArgs / completeCard /
+  // errorCard) as directed by the Phase 6a-ii plan.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const unlisten = await listen<ChatEventPayload>('agent:event', (evt) => {
+        const payload = evt.payload;
+
+        if (payload.type === 'tool_call_start' && payload.id && payload.name) {
+          performance.mark(`tool_call_start_${payload.id}`);
+          addCard(payload.id, payload.name);
+
+        } else if (payload.type === 'tool_call_delta' && payload.id && payload.args_delta) {
+          updateCardArgs(payload.id, payload.args_delta);
+
+        } else if (payload.type === 'tool_call_end') {
+          // ToolCallEnd: args assembly complete; tool is still executing.
+          // No agentStore action at this point (result arrives via tool_result).
+
+        } else if (payload.type === 'tool_result' && payload.id) {
+          completeCard(payload.id, payload.result ?? '');
+
+        } else if (payload.type === 'tool_error' && payload.id) {
+          errorCard(payload.id, payload.message ?? '');
+
+        } else if (payload.type === 'done') {
+          setIsStreaming(false);
+        }
+      });
+      if (!cancelled) {
+        unlistenAgentRef.current = unlisten;
+      } else {
+        unlisten();
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (unlistenAgentRef.current) {
+        unlistenAgentRef.current();
+        unlistenAgentRef.current = null;
+      }
+    };
+  // addCard / updateCardArgs / completeCard / errorCard are stable Zustand actions.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load models and check key on mount.
@@ -734,6 +796,24 @@ export function ChatPanel() {
             {t('chat.agentMode')}
           </span>
         </label>
+        {/* Phase 6a-ii: running/done/pause labels (hidden visually, aria-label for a11y) */}
+        {agentMode && isStreaming && (
+          <span
+            aria-label={t('agent.runningLabel')}
+            title={t('agent.pauseLabel')}
+            className="text-[10px] text-biscuit-400 select-none"
+          >
+            {t('agent.runningLabel')}
+          </span>
+        )}
+        {agentMode && !isStreaming && (
+          <span
+            aria-label={t('agent.doneLabel')}
+            className="sr-only"
+          >
+            {t('agent.doneLabel')}
+          </span>
+        )}
         <button
           aria-label={t('chat.newChat')}
           title={t('chat.newChat')}
