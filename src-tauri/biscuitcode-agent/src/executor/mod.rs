@@ -491,8 +491,10 @@ mod tests {
             messages: Vec<Message>,
             _tools: Vec<ToolSpec>,
             _opts: ChatOptions,
-        ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatEvent, ProviderError>> + Send>>, ProviderError>
-        {
+        ) -> Result<
+            Pin<Box<dyn Stream<Item = Result<ChatEvent, ProviderError>> + Send>>,
+            ProviderError,
+        > {
             // On the second call the message list contains a Tool role message
             // (the tool result). Return text + Done to terminate the loop.
             let has_tool_result = messages
@@ -611,7 +613,9 @@ mod tests {
         let _outcome = executor.run(provider, msgs, opts, true).await.unwrap();
 
         let events = emitted.lock().unwrap();
-        let tool_result = events.iter().find(|e| matches!(e, ChatEvent::ToolResult { id, .. } if id == "call-1"));
+        let tool_result = events
+            .iter()
+            .find(|e| matches!(e, ChatEvent::ToolResult { id, .. } if id == "call-1"));
         assert!(
             tool_result.is_some(),
             "expected ToolResult event with id='call-1'; got: {events:?}"

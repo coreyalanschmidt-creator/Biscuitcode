@@ -779,10 +779,7 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/api/version"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(&json!({ "version": "0.19.5" })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "version": "0.19.5" })))
             .mount(&server)
             .await;
 

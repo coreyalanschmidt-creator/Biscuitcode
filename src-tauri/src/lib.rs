@@ -10,15 +10,9 @@
 
 mod commands;
 
-use std::sync::{
-    atomic::AtomicBool,
-    Arc, Mutex,
-};
+use std::sync::{atomic::AtomicBool, Arc, Mutex};
 
-use biscuitcode_agent::{
-    executor::confirmation::PendingConfirmations,
-    tools::ToolRegistry,
-};
+use biscuitcode_agent::{executor::confirmation::PendingConfirmations, tools::ToolRegistry};
 use biscuitcode_core::errors::CatalogueError;
 use biscuitcode_db::Database;
 use biscuitcode_lsp::LspRegistry;
@@ -56,7 +50,9 @@ pub fn run() {
         .manage(ChatDb(Mutex::new(None)))
         // Phase 6a-ii — agent run managed state.
         .manage(AgentPauseFlag(Arc::new(AtomicBool::new(false))))
-        .manage(AgentToolRegistry(Arc::new(ToolRegistry::read_only_default())))
+        .manage(AgentToolRegistry(Arc::new(
+            ToolRegistry::read_only_default(),
+        )))
         // Phase 6b — confirmation gate shared state.
         .manage(ConfirmationState(Arc::new(PendingConfirmations::new())))
         // Phase 7 — LSP session registry.

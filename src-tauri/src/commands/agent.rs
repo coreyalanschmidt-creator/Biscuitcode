@@ -29,9 +29,7 @@ use biscuitcode_agent::{
 };
 use biscuitcode_core::secrets;
 use biscuitcode_db::{ConversationId, MessageId};
-use biscuitcode_providers::{
-    AnthropicProvider, ChatEvent, ChatOptions, Message, ModelProvider,
-};
+use biscuitcode_providers::{AnthropicProvider, ChatEvent, ChatOptions, Message, ModelProvider};
 
 use super::chat::{ChatDb, ChatEventPayload};
 
@@ -177,8 +175,7 @@ pub async fn agent_run(
     registry_state: State<'_, AgentToolRegistry>,
     conversation_id: String,
     model_id: String,
-    #[allow(unused_variables)]
-    agent_mode: bool,
+    #[allow(unused_variables)] agent_mode: bool,
 ) -> Result<(), String> {
     // Reset the pause flag for this run.
     pause_state.0.store(false, Ordering::SeqCst);
@@ -226,8 +223,7 @@ pub async fn agent_run(
         let guard = ws.0.lock().map_err(|_| "workspace lock poisoned")?;
         match guard.as_deref() {
             Some(p) => std::path::PathBuf::from(p),
-            None => std::env::current_dir()
-                .unwrap_or_else(|_| std::path::PathBuf::from("/")),
+            None => std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/")),
         }
     };
 
@@ -235,10 +231,9 @@ pub async fn agent_run(
 
     // Emit callback: each ChatEvent goes to "agent:event" on the Tauri bus.
     let app_clone = app.clone();
-    let emit_event: biscuitcode_agent::executor::EventEmitter =
-        Arc::new(move |ev: &ChatEvent| {
-            let _ = app_clone.emit("agent:event", ChatEventPayload::from_event(ev));
-        });
+    let emit_event: biscuitcode_agent::executor::EventEmitter = Arc::new(move |ev: &ChatEvent| {
+        let _ = app_clone.emit("agent:event", ChatEventPayload::from_event(ev));
+    });
 
     // Minimal ExecutorContext — no confirmation gate for read-only 6a-ii tools.
     let pending = Arc::new(PendingConfirmations::new());
@@ -263,8 +258,7 @@ pub async fn agent_run(
         emit_event: Some(emit_event),
     });
 
-    let mut executor =
-        ReActExecutor::new(registry, workspace_root, conv_id).with_context(exec_ctx);
+    let mut executor = ReActExecutor::new(registry, workspace_root, conv_id).with_context(exec_ctx);
     // Replace the executor's own pause flag with the managed one (PM-01 fix).
     executor.pause = pause_flag;
 
