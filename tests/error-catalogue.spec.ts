@@ -40,6 +40,11 @@ async function dispatchAndFindAlert(
   payload: AppErrorPayload,
 ): Promise<HTMLElement> {
   const { getAllByRole } = render(React.createElement(ToastLayer));
+  // Yield so ToastLayer's useEffect runs and registers the window listener
+  // before we fire the event. Without this, the dispatch races the mount:
+  // CI (higher contention) sees the event miss the listener roughly 1 in 5
+  // runs; local (single-threaded vitest worker) was reliable by accident.
+  await new Promise((r) => setTimeout(r, 0));
   window.dispatchEvent(
     new CustomEvent('biscuitcode:error-toast', { detail: payload }),
   );
@@ -75,12 +80,13 @@ const TRIGGERS: Partial<Record<ErrorCode, TriggerFn>> = {
 
     const { getByRole, queryByText } = render(React.createElement(ToastLayer));
 
+    // Yield so useEffect registers the window listener before dispatch.
+    await new Promise((r) => setTimeout(r, 0));
+
     window.dispatchEvent(
       new CustomEvent('biscuitcode:error-toast', { detail: payload }),
     );
 
-    // Wait for the toast to render (state update is synchronous here but
-    // give React one microtask to flush).
     await new Promise((r) => setTimeout(r, 0));
 
     const alert = getByRole('alert');
@@ -119,6 +125,8 @@ const TRIGGERS: Partial<Record<ErrorCode, TriggerFn>> = {
     };
 
     const { getAllByRole, queryByText } = render(React.createElement(ToastLayer));
+    // Yield so useEffect registers the window listener before dispatch.
+    await new Promise((r) => setTimeout(r, 0));
     window.dispatchEvent(new CustomEvent('biscuitcode:error-toast', { detail: payload }));
     await new Promise((r) => setTimeout(r, 0));
 

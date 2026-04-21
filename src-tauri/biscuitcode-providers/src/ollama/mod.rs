@@ -63,6 +63,61 @@ impl Default for OllamaProvider {
     }
 }
 
+/// Outcome of the Ollama daemon version check.
+#[derive(Debug, Eq, PartialEq)]
+pub enum OllamaVersionStatus {
+    /// Daemon running and version >= 0.20.0.
+    Ready(String),
+    /// Daemon running but version is below the Gemma 4 minimum.
+    TooOld(String),
+    /// Connection refused or other network error — daemon not running / not installed.
+    Down,
+}
+
+impl OllamaProvider {
+    /// GET /api/version and classify the result.
+    ///
+    /// This is the core logic tested by the unit tests; the Tauri command
+    /// `ollama_check_and_install` wraps this and emits the appropriate error
+    /// events.
+    pub async fn check_version(&self) -> OllamaVersionStatus {
+        let url = format!("{}/api/version", self.base_url);
+        let resp = match self.client.get(&url).send().await {
+            Ok(r) => r,
+            Err(_) => return OllamaVersionStatus::Down,
+        };
+
+        if !resp.status().is_success() {
+            return OllamaVersionStatus::Down;
+        }
+
+        let body: serde_json::Value = match resp.json().await {
+            Ok(v) => v,
+            Err(_) => return OllamaVersionStatus::Down,
+        };
+
+        let version = body["version"].as_str().unwrap_or("0.0.0").to_string();
+        if ollama_version_gte(&version, (0, 20, 0)) {
+            OllamaVersionStatus::Ready(version)
+        } else {
+            OllamaVersionStatus::TooOld(version)
+        }
+    }
+}
+
+/// Semver-style comparison for Ollama version strings.
+/// Returns true if `v` >= `(maj, min, pat)`. Parse failures return false (safe).
+pub fn ollama_version_gte(v: &str, (req_maj, req_min, req_pat): (u32, u32, u32)) -> bool {
+    let parts: Vec<u32> = v
+        .split('.')
+        .map(|s| s.parse::<u32>().unwrap_or(0))
+        .collect();
+    let maj = parts.first().copied().unwrap_or(0);
+    let min = parts.get(1).copied().unwrap_or(0);
+    let pat = parts.get(2).copied().unwrap_or(0);
+    (maj, min, pat) >= (req_maj, req_min, req_pat)
+}
+
 #[async_trait]
 impl ModelProvider for OllamaProvider {
     fn id(&self) -> &'static str {
@@ -123,11 +178,19 @@ impl ModelProvider for OllamaProvider {
                 let display_name = name.clone();
                 let is_gemma3 = name.starts_with("gemma3:");
                 let is_gemma4 = name.starts_with("gemma4:");
-                let is_qwen_coder = name.starts_with("qwen2.5-coder:");
+                // Permissive default: assume tool support unless the model
+                // name indicates it's an embedding or vision-caption-only model.
+                // Conservative whitelist incorrectly blocks llama3.1, phi4,
+                // qwen3, etc. (Q1 decision).
+                let is_embed_only = name.starts_with("nomic-embed")
+                    || name.starts_with("mxbai-embed")
+                    || name.starts_with("all-minilm")
+                    || name.starts_with("snowflake-arctic-embed")
+                    || (name.starts_with("llava:") && !name.contains("chat"));
                 Some(ModelInfo {
                     id: name.clone(),
                     display_name,
-                    supports_tools: is_gemma4 || is_qwen_coder || is_gemma3,
+                    supports_tools: !is_embed_only,
                     supports_vision: is_gemma4,
                     is_reasoning_model: false,
                     // Mark gemma3 as legacy when gemma4 is also present.
@@ -661,5 +724,85 @@ mod tests {
 
         let g3 = models.iter().find(|m| m.id == "gemma3:4b").unwrap();
         assert!(g3.legacy, "gemma3:4b must be legacy when gemma4 is present");
+    }
+
+    // ---------- Phase 6a-iii required tests ----------
+
+    /// AC: a model NOT in any known whitelist (e.g. llama3.1:8b) must have
+    /// `supports_tools: true` — permissive default (Q1 decision).
+    #[tokio::test]
+    async fn supports_tools_default_is_true() {
+        let server = MockServer::start().await;
+        let tags_body = json!({
+            "models": [
+                { "name": "llama3.1:8b" },
+                { "name": "phi4:latest" },
+                { "name": "nomic-embed-text:latest" }
+            ]
+        });
+        Mock::given(method("GET"))
+            .and(path("/api/tags"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&tags_body))
+            .mount(&server)
+            .await;
+
+        let p = OllamaProvider::with_base_url(server.uri());
+        let models = p.list_models().await.unwrap();
+
+        let llama = models.iter().find(|m| m.id == "llama3.1:8b").unwrap();
+        assert!(
+            llama.supports_tools,
+            "llama3.1:8b must have supports_tools=true (permissive default)"
+        );
+
+        let phi = models.iter().find(|m| m.id == "phi4:latest").unwrap();
+        assert!(
+            phi.supports_tools,
+            "phi4:latest must have supports_tools=true (permissive default)"
+        );
+
+        // Embedding model is the known exception.
+        let embed = models
+            .iter()
+            .find(|m| m.id == "nomic-embed-text:latest")
+            .unwrap();
+        assert!(
+            !embed.supports_tools,
+            "nomic-embed-text must have supports_tools=false (embedding-only)"
+        );
+    }
+
+    /// AC: version_gate_blocks_old_daemon — daemon reports 0.19.5 →
+    /// `check_version` returns `TooOld`.
+    #[tokio::test]
+    async fn version_gate_blocks_old_daemon() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/version"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "version": "0.19.5" })))
+            .mount(&server)
+            .await;
+
+        let p = OllamaProvider::with_base_url(server.uri());
+        let status = p.check_version().await;
+        assert_eq!(
+            status,
+            OllamaVersionStatus::TooOld("0.19.5".to_string()),
+            "expected TooOld for version 0.19.5"
+        );
+    }
+
+    /// AC: daemon_down_returns_e019 — connection refused →
+    /// `check_version` returns `Down`.
+    #[tokio::test]
+    async fn daemon_down_returns_e019() {
+        // Port 1 is always refused.
+        let p = OllamaProvider::with_base_url("http://127.0.0.1:1".into());
+        let status = p.check_version().await;
+        assert_eq!(
+            status,
+            OllamaVersionStatus::Down,
+            "expected Down for connection refused"
+        );
     }
 }

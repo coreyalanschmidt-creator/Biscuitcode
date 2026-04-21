@@ -75,6 +75,9 @@ regex = "1"      # used in fs_search_content for regex mode
 rusqlite = { version = "0.32", features = ["bundled"] }
 chrono = { version = "0.4", features = ["serde"] }
 
+# Phase 6a-iii — RAM detection for Ollama model selection.
+sysinfo = { version = "0.32", default-features = false, features = ["system"] }
+
 [dev-dependencies]
 tempfile = "3"   # ephemeral temp dirs in fs.rs unit tests
 

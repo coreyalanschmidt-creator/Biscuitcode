@@ -10,14 +10,14 @@
 
 mod commands;
 
-use std::sync::{Arc, Mutex};
+use std::sync::{atomic::AtomicBool, Arc, Mutex};
 
-use biscuitcode_agent::executor::confirmation::PendingConfirmations;
+use biscuitcode_agent::{executor::confirmation::PendingConfirmations, tools::ToolRegistry};
 use biscuitcode_core::errors::CatalogueError;
 use biscuitcode_db::Database;
 use biscuitcode_lsp::LspRegistry;
 use biscuitcode_pty::PtyRegistry;
-use commands::agent::ConfirmationState;
+use commands::agent::{AgentPauseFlag, AgentToolRegistry, ConfirmationState};
 use commands::chat::ChatDb;
 use commands::fs::WorkspaceState;
 use commands::lsp::LspState;
@@ -48,6 +48,11 @@ pub fn run() {
         .manage(Arc::new(PtyRegistry::new()))
         // Phase 5 — DB state (None until setup initialises it).
         .manage(ChatDb(Mutex::new(None)))
+        // Phase 6a-ii — agent run managed state.
+        .manage(AgentPauseFlag(Arc::new(AtomicBool::new(false))))
+        .manage(AgentToolRegistry(Arc::new(
+            ToolRegistry::read_only_default(),
+        )))
         // Phase 6b — confirmation gate shared state.
         .manage(ConfirmationState(Arc::new(PendingConfirmations::new())))
         // Phase 7 — LSP session registry.
@@ -77,6 +82,14 @@ pub fn run() {
             commands::chat::chat_list_conversations,
             commands::chat::chat_list_messages,
             commands::chat::chat_send,
+            // Phase 6a-iii — Ollama install flow + RAM detection
+            commands::ollama::ollama_check_and_install,
+            commands::ollama::ollama_pull,
+            commands::ollama::ollama_select_model,
+            commands::ollama::ollama_detect_ram,
+            // Phase 6a-ii — agent run + pause
+            commands::agent::agent_run,
+            commands::agent::agent_pause,
             // Phase 6b — agent confirmation + rewind
             commands::agent::agent_confirm_decision,
             commands::agent::agent_rewind,

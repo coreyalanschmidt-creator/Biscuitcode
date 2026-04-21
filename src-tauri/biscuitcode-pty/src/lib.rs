@@ -346,11 +346,20 @@ pub enum PtyError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // Env mutation is process-global. Rust's test runner parallelises across
+    // threads in the same process, so two tests both setting/unsetting SHELL
+    // race and fail non-deterministically (CI flake on multi-core runners,
+    // serial-ish on single-core dev machines). Serialize env-mutating tests
+    // with a shared Mutex.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn detect_shell_prefers_env() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let prev = std::env::var("SHELL").ok();
-        // SAFETY: test-only mutation of env; tests run in a single thread.
+        // SAFETY: test-only mutation of env; serialised via ENV_LOCK.
         unsafe { std::env::set_var("SHELL", "/bin/zsh") };
         assert_eq!(detect_shell(), "/bin/zsh");
         match prev {
@@ -361,6 +370,7 @@ mod tests {
 
     #[test]
     fn detect_shell_falls_back_when_env_empty() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let prev = std::env::var("SHELL").ok();
         unsafe { std::env::remove_var("SHELL") };
         let shell = detect_shell();

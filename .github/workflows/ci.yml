@@ -180,6 +180,41 @@ jobs:
       # gate is a v1.1 follow-up; no test:a11y script exists yet.
 
   # ---------------------------------------------------------------------------
+  # e2e — Vitest-based integration tests in tests/e2e/ (mocked Tauri IPC).
+  # Playwright is installed so `npx playwright install --with-deps chromium`
+  # succeeds; the runner is Vitest via `pnpm test:e2e`. Ollama-dependent rows
+  # are @skip in the specs; only the Anthropic fixture rows run here.
+  # Runs after the unit-test and typecheck gates pass.
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: E2E tests (tests/e2e via Vitest)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: [typecheck, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: pnpm test:e2e
+        run: pnpm test:e2e
+
+  # ---------------------------------------------------------------------------
   # audit — security. cargo audit + pnpm audit. Both must be clean before merge.
   # ---------------------------------------------------------------------------
   audit:

@@ -124,6 +124,9 @@
     },
     "E018": {
       "msg": "Couldn't download the update: {{reason}}. Try again later or download manually from the releases page."
+    },
+    "E019": {
+      "msg": "Ollama daemon is not running. Start it with: ollama serve"
     }
   },
   "chat": {
@@ -185,7 +188,10 @@
     "inlineEditRegenerate": "Regenerate",
     "inlineEditDiffLabel": "Proposed change (left: original, right: proposed)",
     "inlineEditError": "Failed to generate inline edit.",
-    "inlineEditApplyError": "Failed to apply inline edit."
+    "inlineEditApplyError": "Failed to apply inline edit.",
+    "runningLabel": "Agent running…",
+    "pauseLabel": "Pause agent",
+    "doneLabel": "Agent done"
   },
   "git": {
     "noWorkspace": "No workspace open.",
@@ -274,8 +280,8 @@
     },
     "conversations": {
       "snapshotCleanupLabel": "Automatic snapshot cleanup",
-      "exportButton": "Export all conversations\u2026",
-      "importButton": "Import conversations\u2026",
+      "exportButton": "Export all conversations…",
+      "importButton": "Import conversations…",
       "cleanupNowButton": "Clean up snapshots now"
     },
     "about": {
@@ -283,11 +289,11 @@
       "license": "License",
       "repository": "Repository",
       "checkForUpdates": "Check for updates",
-      "checking": "Checking\u2026",
-      "upToDate": "You\u2019re up to date.",
+      "checking": "Checking…",
+      "upToDate": "You’re up to date.",
       "updateAvailable": "Version {{version}} is available.",
       "downloadDeb": "Download .deb",
-      "updateCheckFailed": "Couldn\u2019t check for updates.",
+      "updateCheckFailed": "Couldn’t check for updates.",
       "downloadAndInstall": "Download & install"
     },
     "providers": {

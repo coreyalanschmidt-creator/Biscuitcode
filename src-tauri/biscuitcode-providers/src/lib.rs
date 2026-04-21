@@ -27,6 +27,7 @@ pub use types::{
 
 pub use anthropic::AnthropicProvider;
 pub use ollama::{
-    agent_mode_preferred, gemma3_fallback_for_ram_gb, gemma4_tag_for_ram_gb, OllamaProvider,
+    agent_mode_preferred, gemma3_fallback_for_ram_gb, gemma4_tag_for_ram_gb, ollama_version_gte,
+    OllamaProvider, OllamaVersionStatus,
 };
 pub use openai::OpenAIProvider;

@@ -549,7 +549,7 @@ impl From<Usage> for UsageDto {
 }
 
 impl ChatEventPayload {
-    fn from_event(event: &ChatEvent) -> Self {
+    pub fn from_event(event: &ChatEvent) -> Self {
         match event {
             ChatEvent::TextDelta { text } => Self {
                 event_type: "text_delta".into(),
@@ -596,10 +596,24 @@ impl ChatEventPayload {
                 recoverable: Some(*recoverable),
                 ..Self::empty()
             },
+            // Emitted by the executor (not the provider stream).
+            // `message` carries the result/error string.
+            ChatEvent::ToolResult { id, result } => Self {
+                event_type: "tool_result".into(),
+                id: Some(id.clone()),
+                message: Some(result.clone()),
+                ..Self::empty()
+            },
+            ChatEvent::ToolError { id, error } => Self {
+                event_type: "tool_error".into(),
+                id: Some(id.clone()),
+                message: Some(error.clone()),
+                ..Self::empty()
+            },
         }
     }
 
-    fn from_err(msg: String) -> Self {
+    pub fn from_err(msg: String) -> Self {
         Self {
             event_type: "error".into(),
             code: Some("E005".into()),
@@ -609,7 +623,7 @@ impl ChatEventPayload {
         }
     }
 
-    fn empty() -> Self {
+    pub fn empty() -> Self {
         Self {
             event_type: String::new(),
             text: None,
