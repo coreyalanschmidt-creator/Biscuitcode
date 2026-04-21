@@ -280,8 +280,8 @@ jobs:
             ```
 
             ### Known limitations in this release
-            - LSP hover / go-to-definition not implemented (OQ #19, deferred post-v1).
             - Wayland-XFCE not supported (XFCE 4.18 has no Wayland; Cinnamon-Wayland is best-effort).
+            - End-to-end tests run under Vitest with a mocked Tauri IPC (not Playwright + real browser).
           files: |
             ${{ env.DEB_PATH }}
             ${{ env.DEB_PATH }}.sig

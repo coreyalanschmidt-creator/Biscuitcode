@@ -35,9 +35,13 @@ Initial public release.
   pane with streaming provider output and Accept/Reject/Regenerate.
 - **Git panel** — branch picker, staged/unstaged/untracked groups with
   hunk-level stage, commit composer, blame trigger.
-- **LSP backend** — `biscuitcode-lsp` crate spawns and frames
-  rust-analyzer / typescript-language-server / pyright / gopls / clangd
-  child processes with proper Content-Length handling and shutdown.
+- **LSP** — `biscuitcode-lsp` crate spawns and frames rust-analyzer /
+  typescript-language-server / pyright / gopls / clangd child processes
+  with proper Content-Length handling and shutdown. Hover and go-to-
+  definition are wired through Monaco's `registerHoverProvider` and
+  `registerDefinitionProvider` APIs against a thin JSON-RPC
+  correlator (`src/lsp/lspClient.ts`); no dependency on
+  `monaco-languageclient` / `@codingame/monaco-vscode-api`.
 - **Preview panel** — Markdown + HTML (sandboxed iframe) + image + PDF
   (`react-pdf`) + Jupyter notebook, routed by `biscuitcode:preview-file`.
 - **Onboarding + settings** — 3-screen onboarding (Welcome → Models →
@@ -62,11 +66,6 @@ Initial public release.
 
 ### Known limitations in 1.0
 
-- **LSP hover / go-to-definition not wired to the editor.** The Rust
-  LSP backend is complete and tested, but the `monaco-languageclient`
-  frontend adapter is deferred post-v1 (Open Question #19 in
-  `docs/plan.md`) due to Vite ESM issues with
-  `@codingame/monaco-vscode-api` transitive deps.
 - **Wayland-XFCE not supported.** XFCE 4.18 has no Wayland session;
   the `.deb` targets X11-XFCE on Mint 22. Cinnamon-Wayland is
   best-effort.
