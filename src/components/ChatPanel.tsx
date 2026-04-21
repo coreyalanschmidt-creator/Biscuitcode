@@ -183,8 +183,8 @@ export function ChatPanel() {
         unlistenAgentRef.current = null;
       }
     };
-  // addCard / updateCardArgs / completeCard / errorCard are stable Zustand actions.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // addCard / updateCardArgs / completeCard / errorCard are stable Zustand
+    // actions; their identities never change, so mount-only deps are correct.
   }, []);
 
   // Load models and check key on mount.
