@@ -175,9 +175,8 @@ jobs:
       - name: pnpm check:i18n
         run: pnpm check:i18n
 
-      # a11y: Phase 9 ships inline a11y (OnboardingModal focus trap,
-      # role="log" aria-live on chat container). A dedicated axe-core
-      # gate is a v1.1 follow-up; no test:a11y script exists yet.
+      - name: pnpm test:a11y
+        run: pnpm test:a11y
 
   # ---------------------------------------------------------------------------
   # e2e — Vitest-based integration tests in tests/e2e/ (mocked Tauri IPC).

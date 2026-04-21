@@ -57,6 +57,9 @@ pnpm check:i18n && ok "i18n clean" || fail "i18n gate"
 step "pnpm test (vitest unit + integration)"
 pnpm test && ok "vitest pass" || fail "vitest"
 
+step "pnpm test:a11y (axe-core gate)"
+pnpm test:a11y && ok "a11y pass" || fail "a11y"
+
 step "pnpm test:e2e (vitest e2e via second config)"
 pnpm test:e2e && ok "e2e pass" || fail "e2e"
 
