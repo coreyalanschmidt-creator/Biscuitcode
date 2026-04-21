@@ -596,6 +596,20 @@ impl ChatEventPayload {
                 recoverable: Some(*recoverable),
                 ..Self::empty()
             },
+            // Emitted by the executor (not the provider stream).
+            // `message` carries the result/error string.
+            ChatEvent::ToolResult { id, result } => Self {
+                event_type: "tool_result".into(),
+                id: Some(id.clone()),
+                message: Some(result.clone()),
+                ..Self::empty()
+            },
+            ChatEvent::ToolError { id, error } => Self {
+                event_type: "tool_error".into(),
+                id: Some(id.clone()),
+                message: Some(error.clone()),
+                ..Self::empty()
+            },
         }
     }
 

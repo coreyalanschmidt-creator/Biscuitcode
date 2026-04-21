@@ -182,8 +182,26 @@ impl ReActExecutor {
                     return Ok(RunOutcome::Paused { messages });
                 }
 
-                let result = self.dispatch(tc, &assistant_msg_key).await?;
-                messages.push(tool_result_message(tc.id.clone(), result));
+                match self.dispatch(tc, &assistant_msg_key).await {
+                    Ok(result) => {
+                        if let Some(ref cb) = emit_event {
+                            cb(&ChatEvent::ToolResult {
+                                id: tc.id.clone(),
+                                result: result.result.clone(),
+                            });
+                        }
+                        messages.push(tool_result_message(tc.id.clone(), result));
+                    }
+                    Err(e) => {
+                        if let Some(ref cb) = emit_event {
+                            cb(&ChatEvent::ToolError {
+                                id: tc.id.clone(),
+                                error: e.to_string(),
+                            });
+                        }
+                        return Err(e);
+                    }
+                }
             }
 
             // 6. Loop. Provider sees tool results and may emit more tool calls.
@@ -243,6 +261,12 @@ impl ReActExecutor {
                     }
                 }
                 ChatEvent::Done { .. } => break,
+                // ToolResult and ToolError are emitted by the executor
+                // (after dispatch), not by the provider stream. If they
+                // appear in a stream (e.g., forwarded by a future proxy
+                // provider), ignore them here — they are handled below in
+                // the dispatch loop.
+                ChatEvent::ToolResult { .. } | ChatEvent::ToolError { .. } => {}
                 ChatEvent::Error {
                     code,
                     message,
@@ -413,5 +437,184 @@ fn tool_result_message(tool_call_id: String, result: crate::tools::ToolResult) -
             result: result.result,
             truncated: result.truncated,
         }],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use biscuitcode_providers::{
+        ChatEvent, ChatOptions, ContentBlock, Message, ModelInfo, ProviderError, Role, ToolSpec,
+    };
+    use futures::Stream;
+    use std::pin::Pin;
+    use std::sync::Mutex;
+    use tempfile::TempDir;
+
+    use crate::tools::{Tool, ToolClass, ToolCtx, ToolError, ToolResult};
+    use biscuitcode_providers::ToolSpec as Spec;
+
+    // ---------- Stub provider that returns one tool call then Done ----------
+
+    struct StubProvider {
+        /// Single tool call emitted before Done.
+        tool_id: String,
+        tool_name: String,
+        args_json: String,
+    }
+
+    #[async_trait::async_trait]
+    impl biscuitcode_providers::ModelProvider for StubProvider {
+        fn id(&self) -> &'static str {
+            "stub"
+        }
+        fn display_name(&self) -> &'static str {
+            "Stub"
+        }
+        fn supports_tools(&self) -> bool {
+            true
+        }
+        fn supports_vision(&self) -> bool {
+            false
+        }
+        fn supports_thinking(&self) -> bool {
+            false
+        }
+        fn supports_prompt_caching(&self) -> bool {
+            false
+        }
+        async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError> {
+            Ok(vec![])
+        }
+        async fn chat_stream(
+            &self,
+            messages: Vec<Message>,
+            _tools: Vec<ToolSpec>,
+            _opts: ChatOptions,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatEvent, ProviderError>> + Send>>, ProviderError>
+        {
+            // On the second call the message list contains a Tool role message
+            // (the tool result). Return text + Done to terminate the loop.
+            let has_tool_result = messages
+                .iter()
+                .any(|m| m.role == biscuitcode_providers::Role::Tool);
+
+            if has_tool_result {
+                let s = async_stream::try_stream! {
+                    yield ChatEvent::TextDelta { text: "done".to_string() };
+                    yield ChatEvent::Done {
+                        stop_reason: "end_turn".to_string(),
+                        usage: biscuitcode_providers::Usage::default(),
+                    };
+                };
+                return Ok(Box::pin(s));
+            }
+
+            let id = self.tool_id.clone();
+            let name = self.tool_name.clone();
+            let args = self.args_json.clone();
+            let s = async_stream::try_stream! {
+                yield ChatEvent::ToolCallStart { id: id.clone(), name };
+                yield ChatEvent::ToolCallEnd { id, args_json: args };
+                yield ChatEvent::Done {
+                    stop_reason: "tool_use".to_string(),
+                    usage: biscuitcode_providers::Usage::default(),
+                };
+            };
+            Ok(Box::pin(s))
+        }
+    }
+
+    // ---------- Stub tool that always succeeds ----------
+
+    struct AlwaysOkTool;
+
+    #[async_trait::async_trait]
+    impl Tool for AlwaysOkTool {
+        fn spec(&self) -> Spec {
+            Spec {
+                name: self.name().to_string(),
+                description: "test stub".to_string(),
+                input_schema: serde_json::json!({"type":"object","properties":{},"required":[]}),
+            }
+        }
+        fn class(&self) -> ToolClass {
+            ToolClass::Read
+        }
+        fn name(&self) -> &'static str {
+            "always_ok"
+        }
+        async fn execute(
+            &self,
+            _args: serde_json::Value,
+            _ctx: &ToolCtx,
+        ) -> Result<ToolResult, ToolError> {
+            Ok(ToolResult::text("stub result"))
+        }
+    }
+
+    /// Phase 6a-iii acceptance test:
+    /// The executor emits `ChatEvent::ToolResult` with the correct id after a
+    /// tool execution completes successfully.
+    #[tokio::test]
+    async fn tool_result_event_emitted() {
+        let tmp = TempDir::new().unwrap();
+        let workspace = tmp.path().to_path_buf();
+
+        let mut registry = crate::tools::ToolRegistry::new();
+        registry.register(Arc::new(AlwaysOkTool));
+
+        let provider = Arc::new(StubProvider {
+            tool_id: "call-1".to_string(),
+            tool_name: "always_ok".to_string(),
+            args_json: "{}".to_string(),
+        });
+
+        let emitted: Arc<Mutex<Vec<ChatEvent>>> = Arc::new(Mutex::new(vec![]));
+        let emitted_clone = emitted.clone();
+
+        let emit_fn: EventEmitter = Arc::new(move |ev: &ChatEvent| {
+            emitted_clone.lock().unwrap().push(ev.clone());
+        });
+
+        let ctx = Arc::new(ExecutorContext {
+            cache_root: tmp.path().to_path_buf(),
+            pending: Arc::new(confirmation::PendingConfirmations::new()),
+            workspace_trusted: false,
+            emit_confirm: Arc::new(|_| Ok(())),
+            emit_event: Some(emit_fn),
+        });
+
+        let executor = ReActExecutor::new(
+            Arc::new(registry),
+            workspace,
+            biscuitcode_db::ConversationId("test-conv".to_string()),
+        )
+        .with_context(ctx);
+
+        let opts = ChatOptions {
+            model: "stub".to_string(),
+            ..Default::default()
+        };
+        let msgs = vec![Message {
+            role: Role::User,
+            content: vec![ContentBlock::Text {
+                text: "hello".to_string(),
+            }],
+            tool_calls: vec![],
+            tool_results: vec![],
+        }];
+
+        // Run one iteration. The stub provider emits one tool call; the
+        // executor dispatches it and then the provider returns Done (no more
+        // tool calls), so the loop terminates cleanly.
+        let _outcome = executor.run(provider, msgs, opts, true).await.unwrap();
+
+        let events = emitted.lock().unwrap();
+        let tool_result = events.iter().find(|e| matches!(e, ChatEvent::ToolResult { id, .. } if id == "call-1"));
+        assert!(
+            tool_result.is_some(),
+            "expected ToolResult event with id='call-1'; got: {events:?}"
+        );
     }
 }

@@ -50,6 +50,7 @@ regex = "1"
 
 [dev-dependencies]
 tempfile = "3"
+async-stream = "0.3"
 
 [lib]
 name = "biscuitcode_agent"

@@ -175,6 +175,14 @@ pub enum CatalogueError {
         /// Reason the download failed.
         reason: String,
     },
+
+    /// Phase 6a-iii — Ollama daemon unreachable.
+    #[serde(rename = "E019")]
+    #[error("E019 OllamaDaemonDown: daemon unreachable at {endpoint}")]
+    OllamaDaemonDown {
+        /// The endpoint that was attempted.
+        endpoint: String,
+    },
 }
 
 impl CatalogueError {
@@ -200,6 +208,7 @@ impl CatalogueError {
             Self::FontLoadFailed { .. } => "E016",
             Self::UpdateCheckFailed { .. } => "E017",
             Self::UpdateDownloadFailed { .. } => "E018",
+            Self::OllamaDaemonDown { .. } => "E019",
         }
     }
 }
@@ -270,6 +279,10 @@ mod tests {
             .code(),
             CatalogueError::UpdateCheckFailed { reason: "x".into() }.code(),
             CatalogueError::UpdateDownloadFailed { reason: "x".into() }.code(),
+            CatalogueError::OllamaDaemonDown {
+                endpoint: "http://localhost:11434".into(),
+            }
+            .code(),
         ];
 
         // Distinct

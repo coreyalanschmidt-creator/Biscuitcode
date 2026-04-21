@@ -128,6 +128,16 @@ pub enum ChatEvent {
     /// Tool call complete. `args_json` is fully-assembled and parseable.
     ToolCallEnd { id: String, args_json: String },
 
+    /// Tool execution completed successfully. Emitted by the executor
+    /// (not the provider) after a tool returns a result. Frontend uses
+    /// this to transition an AgentActivityPanel card to `status: 'ok'`.
+    ToolResult { id: String, result: String },
+
+    /// Tool execution failed. Emitted by the executor (not the provider)
+    /// after a tool returns an error. Frontend transitions the card to
+    /// `status: 'error'`.
+    ToolError { id: String, error: String },
+
     /// Stream finished cleanly.
     Done {
         /// Provider-normalized: "end_turn", "max_tokens", "tool_use",

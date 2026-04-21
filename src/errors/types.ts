@@ -28,7 +28,8 @@ export type ErrorCode =
   | 'E015' // PreviewRenderFailed               (Phase 7)
   | 'E016' // FontLoadFailed                    (Phase 8)
   | 'E017' // UpdateCheckFailed                 (Phase 9)
-  | 'E018'; // UpdateDownloadFailed             (Phase 9)
+  | 'E018' // UpdateDownloadFailed             (Phase 9)
+  | 'E019'; // OllamaDaemonDown                (Phase 6a-iii)
 
 /** What every error payload carries to the toast. */
 export interface BaseErrorPayload {
@@ -191,6 +192,14 @@ export interface E018_UpdateDownloadFailed extends BaseErrorPayload {
   recovery: { kind: 'open_url'; url: string; label?: string };
 }
 
+// Phase 6a-iii — E019.
+export interface E019_OllamaDaemonDown extends BaseErrorPayload {
+  code: 'E019';
+  messageKey: 'errors.E019.msg';
+  interpolations?: { endpoint?: string };
+  recovery: { kind: 'copy_command'; command: 'ollama serve'; label: 'Copy start command' };
+}
+
 /** The discriminated union the toast accepts. */
 export type AppErrorPayload =
   | E001_KeyringMissing
@@ -210,7 +219,8 @@ export type AppErrorPayload =
   | E015_PreviewRenderFailed
   | E016_FontLoadFailed
   | E017_UpdateCheckFailed
-  | E018_UpdateDownloadFailed;
+  | E018_UpdateDownloadFailed
+  | E019_OllamaDaemonDown;
 
 /** Type guard: is this a known catalogued error? */
 export function isAppError(x: unknown): x is AppErrorPayload {

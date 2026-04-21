@@ -86,6 +86,11 @@ pub fn run() {
             commands::chat::chat_list_conversations,
             commands::chat::chat_list_messages,
             commands::chat::chat_send,
+            // Phase 6a-iii — Ollama install flow + RAM detection
+            commands::ollama::ollama_check_and_install,
+            commands::ollama::ollama_pull,
+            commands::ollama::ollama_select_model,
+            commands::ollama::ollama_detect_ram,
             // Phase 6a-ii — agent run + pause
             commands::agent::agent_run,
             commands::agent::agent_pause,

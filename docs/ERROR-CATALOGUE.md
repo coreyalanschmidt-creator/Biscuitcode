@@ -33,6 +33,7 @@ This file is the source of truth for every user-facing error in BiscuitCode. The
 | `E016` | Phase 8 | `FontLoadFailed` | Self-hosted Inter or JetBrains Mono woff2 didn't load (canary detected fallback metrics) | `errors.E016.msg` — "BiscuitCode's bundled fonts didn't load. Falling back to system fonts. Re-installing the .deb usually fixes this." | One-time toast. Reinstall command. |
 | `E017` | Phase 9 | `UpdateCheckFailed` | GitHub Releases API check failed (network, rate limit, 5xx) | `errors.E017.msg` — "Couldn't check for updates. Check your connection." | Retry button. Backs off on subsequent failures. |
 | `E018` | Phase 9 | `UpdateDownloadFailed` | AppImage Tauri-updater download failed (network, signature mismatch, disk space) | `errors.E018.msg` — "Couldn't download the update: `<reason>`. Try again later or download manually from the releases page." | Open releases page button. |
+| `E019` | Phase 6a-iii | `OllamaDaemonDown` | `GET http://localhost:11434/api/version` returned connection refused | `errors.E019.msg` — "Ollama daemon is not running. Start it with: ollama serve" | Copy-to-clipboard button with `ollama serve`. Surface the Install button if Ollama not installed. |
 
 ## Phase 9 audit checklist
 

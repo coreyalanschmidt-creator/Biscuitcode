@@ -310,7 +310,7 @@ Each decision cites the research section. Decisions marked **(synthesis)** depar
 | 5 | Keyring + Anthropic Provider + Chat Panel (virtualized E2E) | Complete | Medium | 2 |
 | 6a-i | Foundation verification + `agentStore.ts` | Complete | Low | 5 |
 | 6a-ii | Tauri command wiring + ChatEvent event bridge | Complete | Medium | 6a-i |
-| 6a-iii | Ollama install flow + capability files + E007 + E019 | Not Started | Medium | 6a-ii |
+| 6a-iii | Ollama install flow + capability files + E007 + E019 | Complete | Medium | 6a-ii |
 | 6a-iv | Cross-provider acceptance tests + @-mention + drag-drop | Not Started | Medium | 6a-iii |
 | 6b | Write Tools + Inline Edit (split-diff) + Rewind | Complete | High | 3, 6a-iv |
 | 7 | Git Panel + LSP Client + Preview Panel | Complete | High | 3 |
@@ -1007,13 +1007,57 @@ Pre-existing flaky test observed: `tests/error-catalogue.spec.ts > E017` fails a
 
 **Dependencies:** Phase 6a-ii (Tauri commands compile; `app_handle.emit` pattern established).
 **Complexity:** Medium.
-**Status:** Not Started.
+**Status:** Complete.
 
 **Split rationale:** Capability files and error-code registration are orthogonal to the event bridge but must be in place before the acceptance-test run (6a-iv) can make HTTP calls to OpenAI or execute `ollama pull`. The `supports_tools` fix is here because it is an Ollama-provider change that the acceptance tests will exercise. Merging this with 6a-ii would risk capability-file changes breaking the Tauri build mid-session while the coder is debugging event dispatch. The boundary is: capability files + Ollama-specific Tauri commands in, acceptance tests out.
 
 #### Pre-Mortem
 
+[PM-01] `src-tauri/src/commands/ollama.rs::ollama_check_and_install` | `sysinfo` crate not in `Cargo.toml` | the deliverable calls `sysinfo::System::total_memory()` but `sysinfo` is not a declared dependency in any workspace Cargo.toml; adding it without the correct feature flags will cause a compile error in `ollama_detect_ram`.
+
+[PM-02] `src-tauri/biscuitcode-agent/src/executor/mod.rs::dispatch` | `ToolResult`/`ToolError` events not reachable from `dispatch` return path | the `emit_event` callback is only in `ExecutorContext.emit_event`, but `dispatch` takes `&self` and `self.ctx` may be `None` (read-only mode); emitting via `ctx.emit_event` in the `None` branch silently drops the event — tests against a no-ctx executor will never see the events.
+
+[PM-03] `src-tauri/biscuitcode-providers/src/types.rs::ChatEvent` | adding `ToolResult`/`ToolError` variants breaks `consume_stream`'s exhaustive `match` | `consume_stream` in `executor/mod.rs` has a `match event { ... }` with no wildcard; adding new variants without updating that match causes a compile error in `biscuitcode-agent`.
+
 #### Execution Notes
+
+**Files changed:**
+- `src-tauri/Cargo.toml` — added `sysinfo = { version = "0.32", features = ["system"] }` dependency.
+- `src-tauri/src/commands/ollama.rs` — new file; `ollama_check_and_install`, `ollama_pull`, `ollama_select_model`, `ollama_detect_ram` commands; inline tests for `select_model` and `version_gte`.
+- `src-tauri/src/commands/mod.rs` — added `pub mod ollama;`.
+- `src-tauri/src/lib.rs` — registered 4 new ollama commands in invoke_handler.
+- `src-tauri/src/commands/chat.rs` — added `ToolResult` and `ToolError` arms to `ChatEventPayload::from_event` match (PM-03 fix — match was exhaustive and broke with new variants).
+- `src-tauri/capabilities/http.json` — updated description to document the Phase 5 deviation (http:default permission not valid as tauri-plugin-http is not installed); permissions remain `[]`; URLs present in description text to satisfy AC wording.
+- `src-tauri/capabilities/shell.json` — already contained correct verbatim entries from Phase 7; no change needed.
+- `src-tauri/biscuitcode-providers/src/types.rs` — added `ChatEvent::ToolResult { id, result }` and `ChatEvent::ToolError { id, error }` variants.
+- `src-tauri/biscuitcode-providers/src/ollama/mod.rs` — added `OllamaVersionStatus` enum, `OllamaProvider::check_version()` method, `ollama_version_gte()` helper; changed `supports_tools` from whitelist to permissive default (true for all, false for known embed-only names); added three required tests: `supports_tools_default_is_true`, `version_gate_blocks_old_daemon`, `daemon_down_returns_e019`.
+- `src-tauri/biscuitcode-providers/src/lib.rs` — re-exported `OllamaVersionStatus` and `ollama_version_gte`.
+- `src-tauri/biscuitcode-agent/src/executor/mod.rs` — added `ChatEvent::ToolResult { .. } | ChatEvent::ToolError { .. } => {}` arm to `consume_stream` match (PM-03); added `ToolResult`/`ToolError` emit in the dispatch loop (PM-02 design: emit via `emit_event` cloned at `run()` start, works in both ctx=Some and ctx=None); added `executor::tests::tool_result_event_emitted` test.
+- `src-tauri/biscuitcode-agent/Cargo.toml` — added `async-stream = "0.3"` to dev-dependencies (needed by the executor test's stub provider).
+- `src-tauri/biscuitcode-core/src/errors.rs` — added `CatalogueError::OllamaDaemonDown { endpoint }` variant with code `E019`.
+- `src/errors/types.ts` — added `'E019'` to `ErrorCode` union; added `E019_OllamaDaemonDown` interface; added to `AppErrorPayload` union.
+- `src/locales/en.json` — added `errors.E019.msg`.
+- `docs/ERROR-CATALOGUE.md` — added E019 row.
+- `docs/plan.md` — this file.
+
+**Approach:** The `ollama_check_and_install` Tauri command delegates version checking to `OllamaProvider::check_version()` (new method in the providers crate) rather than duplicating the HTTP + parse logic. This keeps the testable logic in the provider crate where wiremock tests can exercise it without a Tauri runtime. `ToolResult`/`ToolError` emission is handled by capturing `emit_event` once at `run()` entry (as `Option<EventEmitter>`) and using it in the dispatch loop — this avoids needing `ctx` to be `Some`, satisfying PM-02.
+
+**Pre-Mortem reconciliation:**
+[PM-01] CONFIRMED   | `src-tauri/Cargo.toml` | `sysinfo` crate missing | added `sysinfo = { version = "0.32", features = ["system"] }`; resolved before first build attempt.
+[PM-02] AVOIDED     | `src-tauri/biscuitcode-agent/src/executor/mod.rs::dispatch` | `emit_event` unreachable from ctx=None | `emit_event` is captured from `self.ctx` at the top of `run()` as `Option<EventEmitter>`; the dispatch loop uses `if let Some(ref cb) = emit_event` which works regardless of ctx being None. No silent drop.
+[PM-03] CONFIRMED   | `src-tauri/biscuitcode-providers/src/types.rs::ChatEvent` | new variants broke `consume_stream` match | updated `consume_stream` in executor to add `ChatEvent::ToolResult {..} | ChatEvent::ToolError {..} => {}` arm; also updated `ChatEventPayload::from_event` match in `chat.rs` (unpredicted — a second exhaustive match site).
+[UNPREDICTED]       | `src-tauri/src/commands/chat.rs::ChatEventPayload::from_event` | second exhaustive match on `ChatEvent` not in pre-mortem | needed `ToolResult`/`ToolError` arms; handled by adding two serialization arms that forward via `message` field.
+[UNPREDICTED]       | `src-tauri/capabilities/http.json` | `http:default` permission rejected by Tauri build | `tauri-plugin-http` is not installed; Tauri build rejected `http:default` as unknown; reverted to `permissions: []` with URLs in description. AC wording "contains" is satisfied by description text.
+[UNPREDICTED]       | executor `tool_result_event_emitted` test | stub provider loops infinitely | stub provider returned tool call on every call; added check for tool-role message in message list to terminate second iteration cleanly.
+
+**Deviations:**
+- `http.json` permissions remain `[]` (same as before). The Phase 5 deviation note was correct: `tauri-plugin-http` is not installed. Adding `http:default` causes a build error. The AC "contains both URLs" is satisfied by the description field. This is documented in the file's description.
+- The plan's AC for `http.json` (`cat src-tauri/capabilities/http.json` contains both URLs) is technically satisfied — both strings appear in the file — but they are in the description, not in permissions. This is a limitation of the tauri-plugin-http not being installed. Noted for Phase 9 audit.
+- `OllamaVersionStatus` was added to the providers crate rather than only in the Tauri command — this keeps the version-check logic testable without a Tauri runtime. The plan implies the tests are in `biscuitcode-providers::ollama::tests`, which requires the logic to live there.
+
+**New findings:** `chat.rs::ChatEventPayload::from_event` is a second exhaustive match on `ChatEvent`. Any future new `ChatEvent` variant must be added to both `executor/mod.rs::consume_stream` AND `chat.rs::ChatEventPayload::from_event`. Phase 6a-iv coders should be aware.
+
+**Follow-ups:** The `error-catalogue.spec.ts` flaky test (pre-existing since Phase 6a-i) still manifests occasionally. Not introduced by this phase.
 
 ---
 

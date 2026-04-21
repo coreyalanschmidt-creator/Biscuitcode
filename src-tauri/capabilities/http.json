@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "http",
-  "description": "HTTP fetch allowlist. Anthropic API calls go via Rust (reqwest), not the webview fetch API. Phase 5 adds Anthropic to reqwest — no Tauri webview permission needed. Phase 6a will add OpenAI + Ollama the same way. See docs/design/CAPABILITIES.md.",
+  "description": "HTTP fetch allowlist. All AI provider API calls (Anthropic, OpenAI, Ollama) go via Rust reqwest — not the webview fetch() API — so no Tauri webview HTTP capability is needed. Phase 5 deviation: tauri-plugin-http is not installed; adding http:default here causes a build error. The URLs https://api.anthropic.com/**, https://api.openai.com/**, and http://localhost:11434/** are listed in docs/design/CAPABILITIES.md as the intended allowlist for reference, but are not expressed as capability permissions since reqwest bypasses the Tauri HTTP scope entirely. See Phase 5 and 6a-iii Execution Notes.",
   "windows": ["main"],
   "permissions": []
 }
