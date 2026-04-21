@@ -1618,6 +1618,48 @@ Theme system uses runtime CSS variable injection on `document.documentElement.st
 - The `--passWithNoTests` flag on `pnpm test:a11y` in ci.yml should be removed once Phase 9's axe-core tests are confirmed working in CI (pre-existing tech debt from Phase 9).
 - OQ #19 (LSP hover/go-to-def) documented in `docs/RELEASE.md` "Known limitations" section. Not a blocker for v1.0 tag.
 
+#### Appendix — Playwright e2e runner infrastructure (2026-04-19)
+
+**Scope:** Single missing deliverable from the 2026-04-19 Review Log (OQ #19 resolution). Phase 10 status remains Complete; this appendix records the runner-infrastructure work added after the original execution.
+
+**Status:** Complete
+
+##### Pre-Mortem
+
+[PM-01] `vitest.e2e.config.ts` | `@tauri-apps/api` module resolution fails under the e2e vitest config because the config omits the same plugin setup as the base config | both spec files mock `@tauri-apps/api/core` and `@tauri-apps/api/event` with `vi.mock()` — if the config's `environment: 'jsdom'` and `@vitejs/plugin-react` are absent, the mocks won't intercept and the real module resolution will fail with a Node import error.
+
+[PM-02] `tests/e2e/agent-mode-demo.spec.ts` | top-level `await i18next...init(...)` fails when run through a second vitest config if `globals` or module mode is misconfigured | top-level await in TypeScript requires the file to be treated as an ES module; the base `vitest.config.ts` doesn't set `globals: true` and relies on ESM-native top-level await — the e2e config must match exactly or the spec will throw a `SyntaxError: await is only valid in async functions`.
+
+[PM-03] `playwright.config.ts` | if `testMatch` or `testDir` points at `tests/e2e/` with Playwright's default spec-detection, `pnpm exec playwright test` will try to run the Vitest-style specs as real browser tests and crash on the first `import { describe } from 'vitest'` | Playwright's runner doesn't understand Vitest APIs; must use a `vitest.e2e.config.ts` for the actual runner and make `pnpm test:e2e` invoke that, while keeping `playwright.config.ts` as a structural placeholder.
+
+##### Execution Notes
+
+**Files changed:**
+- `package.json` — added `"test:e2e": "vitest run --config vitest.e2e.config.ts"` script; `@playwright/test ^1.59.1` added to `devDependencies` by `pnpm add -D @playwright/test`.
+- `pnpm-lock.yaml` — updated by pnpm.
+- `vitest.e2e.config.ts` — new file: second Vitest config that includes only `tests/e2e/**`. Identical plugin/environment setup to `vitest.config.ts` (jsdom + @vitejs/plugin-react) to match the mocking environment the specs were authored against.
+- `playwright.config.ts` — new file: structural placeholder. `testDir: 'tests/e2e'`, `timeout: 30_000`, `retries: 1` in CI, `baseURL: 'http://localhost:1420'`, `webServer` commented out. Exists so `npx playwright install --with-deps chromium` has a config reference and future real browser tests have a home.
+- `.github/workflows/ci.yml` — added `e2e` job: installs Playwright Chromium, runs `pnpm test:e2e`; depends on `typecheck` and `test` gates.
+- `tests/e2e/agent-tool-card-render.spec.ts` — added `vi.mock('react-virtuoso', ...)` (identical to the mock in `agent-mode-demo.spec.ts`). Without this, Virtuoso renders no list items in jsdom, `ToolCard` never mounts, and the `performance.mark`/`performance.measure` assertions always fail.
+
+**Approach:** Option (b) — Playwright installed, `playwright.config.ts` exists as infrastructure, `pnpm test:e2e` runs via `vitest.e2e.config.ts`. The plan's literal `"test:e2e": "playwright test"` would crash because the specs import Vitest APIs that Playwright's runner doesn't understand. Using a second Vitest config is the minimum change that satisfies the AC (`pnpm test:e2e` exits 0) while keeping Playwright installed and `playwright.config.ts` present for future real browser-automation tests. Deviation documented below.
+
+**Pre-Mortem reconciliation:**
+[PM-01] AVOIDED     | `vitest.e2e.config.ts`                    | @tauri-apps/api resolution fails           | vi.mock() in specs intercepts before real module resolution; config uses same jsdom+react plugin as base config.
+[PM-02] AVOIDED     | `agent-mode-demo.spec.ts` top-level await | SyntaxError in misconfigured runner        | vitest.e2e.config.ts is identical in globals/environment to base config; ESM top-level await works correctly.
+[PM-03] AVOIDED     | `playwright.config.ts`                    | Playwright runs Vitest specs as browser tests | `pnpm test:e2e` invokes `vitest run --config vitest.e2e.config.ts`, not `playwright test`; playwright.config.ts is a placeholder only.
+[UNPREDICTED]       | `agent-tool-card-render.spec.ts`           | react-virtuoso mock missing; ToolCard never mounts in jsdom; performance marks not emitted; 2 of 3 tests fail | Added `vi.mock('react-virtuoso', ...)` (same mock as sibling spec).
+
+**Deviations:**
+- Plan says `"test:e2e": "playwright test"`. Implemented as `"test:e2e": "vitest run --config vitest.e2e.config.ts"` because the specs use Vitest APIs incompatible with Playwright's runner. This matches the reviewer's "option (b)" intent: Playwright is installed, its infrastructure is present, but the specs run via Vitest. A future phase can replace the script value with `playwright test` once real Playwright browser-automation specs are authored.
+- `tests/e2e/agent-tool-card-render.spec.ts` required a one-line `vi.mock('react-virtuoso', ...)` addition to make it runnable. This is a spec completeness fix, not a feature change; the spec was always broken without this mock (Virtuoso uses ResizeObserver/IntersectionObserver which jsdom doesn't implement).
+
+**New findings:** None affecting later phases (all phases are already Complete).
+
+**Follow-ups:**
+- When real Playwright browser-automation specs against `tauri dev` or `vite preview` are added, update `pnpm test:e2e` to `playwright test`, uncomment `webServer` in `playwright.config.ts`, and update the CI job to match.
+- The `forwardRef` warning from `ChatPanel.tsx` appears in both the unit tests and e2e tests (stderr, no test failure). It's a pre-existing issue in the component; not in scope here per Law 3.
+
 ---
 
 ## Global Acceptance Criteria

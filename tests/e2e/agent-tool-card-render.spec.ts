@@ -27,6 +27,29 @@ import { expect as jestExpect } from 'vitest';
 import * as matchers from '@testing-library/jest-dom/matchers';
 import React from 'react';
 
+// react-virtuoso uses IntersectionObserver / ResizeObserver which jsdom does
+// not implement. Without a mock, Virtuoso renders no list items and ToolCard
+// never mounts — the performance marks and measures that this test asserts
+// are never emitted. The same mock pattern is used in agent-mode-demo.spec.ts.
+vi.mock('react-virtuoso', () => ({
+  Virtuoso: ({
+    data,
+    itemContent,
+    className,
+  }: {
+    data: unknown[];
+    itemContent: (index: number, item: unknown) => React.ReactNode;
+    className?: string;
+  }) =>
+    React.createElement(
+      'div',
+      { className },
+      data.map((item, i) =>
+        React.createElement(React.Fragment, { key: i }, itemContent(i, item)),
+      ),
+    ),
+}));
+
 jestExpect.extend(matchers);
 
 import i18next from 'i18next';
