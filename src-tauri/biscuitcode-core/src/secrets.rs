@@ -11,12 +11,13 @@
 //! daemon with a known credential, which `keyring::Entry::get_password`
 //! would do as a side-effect on some Linux distributions.
 //!
-//! **API shape note:** the public `async fn` wrappers call the synchronous
-//! `keyring::Entry` methods (keyring 3.x's public API is sync even with the
-//! `async-secret-service` feature, which only affects internal D-Bus I/O).
-//! The `async` signature is preserved so callers (Tauri commands, future
-//! async contexts) don't have to change when keyring eventually exposes
-//! async surface.
+//! **Implementation note:** these `async fn` wrappers use
+//! `tokio::task::spawn_blocking` to move the synchronous `keyring::Entry`
+//! calls off the Tokio worker thread. Without this, when called from a
+//! Tauri command (which runs on a Tokio worker), the sync `keyring` crate
+//! drives `zbus` which internally calls `block_on` and panics with
+//! "Cannot start a runtime from within a runtime" on `tokio-rt-worker`.
+//! The `async` signature is preserved so callers don't have to change.
 
 use crate::CatalogueError;
 use std::process::Command;
@@ -55,28 +56,56 @@ pub fn secret_service_available() -> Result<bool, CatalogueError> {
 /// Requires [`secret_service_available`] returned `Ok(true)` for the
 /// current session. Call that BEFORE this; if false, surface E001.
 pub async fn set(service: &str, key: &str, value: &str) -> Result<(), CatalogueError> {
-    let entry = keyring::Entry::new(service, key).map_err(|_| CatalogueError::KeyringMissing)?;
-    entry.set_password(value).map_err(keyring_err_to_catalogue)
+    let service = service.to_string();
+    let key = key.to_string();
+    let value = value.to_string();
+    tokio::task::spawn_blocking(move || {
+        let entry =
+            keyring::Entry::new(&service, &key).map_err(|_| CatalogueError::KeyringMissing)?;
+        entry.set_password(&value).map_err(keyring_err_to_catalogue)
+    })
+    .await
+    .map_err(keyring_join_to_catalogue)?
 }
 
 /// Retrieve a secret. Returns `Ok(None)` when the key is absent;
 /// `Err(KeyringMissing)` when the Secret Service itself is down.
 pub async fn get(service: &str, key: &str) -> Result<Option<String>, CatalogueError> {
-    let entry = keyring::Entry::new(service, key).map_err(|_| CatalogueError::KeyringMissing)?;
-    match entry.get_password() {
-        Ok(v) => Ok(Some(v)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(keyring_err_to_catalogue(e)),
-    }
+    let service = service.to_string();
+    let key = key.to_string();
+    tokio::task::spawn_blocking(move || {
+        let entry =
+            keyring::Entry::new(&service, &key).map_err(|_| CatalogueError::KeyringMissing)?;
+        match entry.get_password() {
+            Ok(v) => Ok(Some(v)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(keyring_err_to_catalogue(e)),
+        }
+    })
+    .await
+    .map_err(keyring_join_to_catalogue)?
 }
 
 /// Delete a secret. No-op if the key didn't exist (idempotent).
 pub async fn delete(service: &str, key: &str) -> Result<(), CatalogueError> {
-    let entry = keyring::Entry::new(service, key).map_err(|_| CatalogueError::KeyringMissing)?;
-    match entry.delete_credential() {
-        Ok(()) => Ok(()),
-        Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(keyring_err_to_catalogue(e)),
+    let service = service.to_string();
+    let key = key.to_string();
+    tokio::task::spawn_blocking(move || {
+        let entry =
+            keyring::Entry::new(&service, &key).map_err(|_| CatalogueError::KeyringMissing)?;
+        match entry.delete_credential() {
+            Ok(()) => Ok(()),
+            Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(keyring_err_to_catalogue(e)),
+        }
+    })
+    .await
+    .map_err(keyring_join_to_catalogue)?
+}
+
+fn keyring_join_to_catalogue(e: tokio::task::JoinError) -> CatalogueError {
+    CatalogueError::AnthropicNetworkError {
+        reason: format!("keyring task: {e}"),
     }
 }
 
@@ -108,5 +137,16 @@ mod tests {
         // of the CI environment. The real semantic test (gnome-keyring
         // on vs. off) belongs on the VM smoke-test matrix (PHASE-5 ACs).
         let _ = secret_service_available();
+    }
+
+    #[tokio::test]
+    async fn set_from_tokio_runtime_does_not_panic() {
+        // Regression: without spawn_blocking, keyring's sync API drives zbus
+        // which calls block_on from inside a tokio worker thread and panics
+        // with "Cannot start a runtime from within a runtime" on Linux.
+        // On CI / machines without a Secret Service the call returns an Err
+        // (KeyringMissing). Either outcome is acceptable — the point is
+        // that the call completes without panicking the runtime.
+        let _ = set("biscuitcode-test", "regression-runtime-panic", "v").await;
     }
 }
